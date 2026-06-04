@@ -1,0 +1,49 @@
+# HeartPin · 하트핀
+
+사진 기반으로 Trip → Day → Spot → Moment 단위의 여정을 자동 정리하고, 지도 + 게임 감성 인터페이스로 "우리들의 기록"을 보여주는 커플 전용 웹.
+
+claude.ai/design 프로토타입(`HeartPin.html`)을 Vite + React로 구현한 버전입니다.
+
+## 실행
+
+```bash
+npm install
+npm run dev      # 개발 서버
+npm run build    # 프로덕션 빌드 (dist/)
+npm run preview  # 빌드 미리보기
+```
+
+Vercel 배포: 저장소 연결만 하면 Vite 프리셋으로 자동 인식됩니다.
+
+## 구조
+
+```
+src/
+├── main.jsx               엔트리 (leaflet css + styles.css)
+├── App.jsx                화면 전환(Home/Main)·상태·키보드 내비 wiring
+├── styles.css             코지 디자인 시스템 전체 (프로토타입 1:1)
+├── data.js                샘플 여행(부산/오사카·교토)·정리함 데이터·배치 추천(suggest)·자동 대사(autoLine)
+├── exif.js                의존성 없는 JPEG EXIF 파서 (촬영일시 + GPS)
+├── buildTrip.js           새 여행 자동 조립 (날짜→Day, GPS ~300m 클러스터→Spot, 좌표→국내/국외)
+├── chars.js               바라·뇽이 캐릭터 에셋
+├── mapUtil.js             Leaflet 헬퍼 (Catmull-Rom 곡선, 핀/캐릭터/여행 divIcon)
+└── components/
+    ├── ui.jsx             Avatar · Photo(플레이스홀더/실사진) · Speech(인라인 편집) · Chip
+    ├── Home.jsx           진입 화면 (히어로·국내외 토글·최근 여행·빠른 진입)
+    ├── MapBoard.jsx       메인 지도 (코지 타일·곡선 타임라인·핀 상태 동기화)
+    ├── Rnb.jsx            기록 패널 (전체 여정 목록 ↔ 카드뉴스 덱, 접기)
+    ├── Gallery.jsx        모먼트 뷰어 (지도 영역 도킹, ‹ 사진 N/M › 페이저)
+    ├── Journey.jsx        풀스크린 시네마틱 재생 (인트로→Spot 씬→엔딩)
+    ├── Inbox.jsx          정리함 (미분류/위치없음/검토함, 배치 확인, 새 장소/새 여행)
+    ├── Upload.jsx         다중 드래그&드롭 업로드 (EXIF 읽기 + 데모 메타 폴백)
+    └── TripPreview.jsx    "이렇게 정리했어요" 새 여행 미리보기/저장
+```
+
+## 추후 작업 메모 (디자인 핸드오프 기준)
+
+- **Mapbox 전환**: 마커가 전부 HTML divIcon이라 그대로 이식 가능. 타일을 Mapbox 스타일로 교체하고 `styles.css`의 `.skin-*` 색 필터 제거. 곡선/핀/캐릭터 로직(`mapUtil.js`)은 좌표 기반이라 재사용.
+- **역지오코딩**: 새 장소 이름("장소 1·2…")을 좌표→실제 지명으로 자동 채우기 (Mapbox 전환 시 연결).
+- **HEIC 메타**: 브라우저에서 파싱 불가 → 현재 데모 메타(강릉) 폴백. 실서비스는 백엔드 추출로 교체 (`Upload.jsx`의 `process()` 한 곳만 수정).
+- **Settings 화면**: 캐릭터 선택·지도 스킨(cozy/sepia/forest CSS는 이미 있음)·표기 언어. 현재 기본값은 `App.jsx`의 `SKIN`/`SHOW_CHARS` 상수.
+- **영속화**: 데이터가 메모리(`data.js`의 HP_DATA) 상태라 새로고침하면 초기화됨. localStorage 또는 백엔드 연동 필요.
+- **LLM 대사 생성**: 현재는 시간대별 템플릿(`autoLine`). 위치명+사진 맥락 기반 생성으로 확장 가능.
