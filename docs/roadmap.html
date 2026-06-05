@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HeartPin · 개발 로드맵 & 아키텍처 결정</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --paper:#f4ede0; --card:#fffdf8; --card-2:#fbf5ea;
+    --ink:#403a2f; --ink2:#8a8072; --ink3:#b6ac98;
+    --line:#e9dfcc; --line2:#dccfb6;
+    --warm:#e3814f; --warm-deep:#cf6a3a; --warm-soft:#f8d6bd; --warm-tint:#fbe9dc;
+    --cool:#69aece; --cool-deep:#4a92b2; --cool-soft:#cce6f1; --cool-tint:#e9f3f9;
+    --sage:#9bc095; --sage-soft:#dcecd6; --gold:#ecc06a; --gold-soft:#f7e7be;
+    --shadow:rgba(120,98,64,.20); --shadow-soft:rgba(120,98,64,.10);
+    --fd:'Jua',sans-serif; --fb:'Gowun Dodum',sans-serif; --fl:'Quicksand',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);background-image:radial-gradient(rgba(120,98,64,.045) 1px,transparent 1px);background-size:22px 22px;
+    color:var(--ink);font-family:var(--fb);font-size:15px;line-height:1.65;word-break:keep-all;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1000px;margin:0 auto;padding:36px 24px 80px;}
+  h1,h2,h3{font-family:var(--fd);font-weight:400;letter-spacing:.01em;}
+  h2{font-size:26px;margin:0 0 4px;}
+  h3{font-size:18px;margin:0 0 8px;}
+  section{margin-bottom:44px;}
+  .sec-kicker{font-family:var(--fd);font-size:13px;color:var(--warm-deep);letter-spacing:.06em;}
+  .sec-sub{color:var(--ink2);font-size:13.5px;margin:2px 0 18px;}
+
+  /* header */
+  .hero{display:flex;align-items:center;gap:18px;background:linear-gradient(120deg,var(--warm-tint),var(--cool-tint));
+    border:1px solid var(--line);border-radius:26px;padding:28px 32px;margin-bottom:40px;box-shadow:0 8px 26px var(--shadow-soft);}
+  .logo{width:52px;height:52px;flex:none;border-radius:60% 40% 55% 45% / 50% 55% 45% 50%;
+    background:linear-gradient(150deg,var(--warm),var(--warm-deep));position:relative;box-shadow:0 4px 12px rgba(207,106,58,.4);}
+  .logo::after{content:"";position:absolute;left:50%;top:53%;transform:translate(-50%,-50%) rotate(-6deg);width:20px;height:19px;background:var(--card);
+    clip-path:path("M10 18.5C3 13 0 9.3 0 5.5 0 2.5 2.3 0 5.2 0 7.1 0 8.8 1.2 10 2.9 11.2 1.2 12.9 0 14.8 0 17.7 0 20 2.5 20 5.5c0 3.8-3 7.5-10 13Z");}
+  .hero h1{font-family:var(--fl);font-weight:700;font-size:30px;margin:0;line-height:1.15;}
+  .hero p{margin:4px 0 0;font-size:14px;color:var(--ink2);}
+  .hero .meta{margin-left:auto;text-align:right;font-size:12.5px;color:var(--ink2);flex:none;}
+  .hero .meta b{font-family:var(--fd);font-weight:400;color:var(--warm-deep);}
+
+  /* cards & chips */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px 22px;box-shadow:0 4px 14px var(--shadow-soft);}
+  .chip{display:inline-block;font-family:var(--fd);font-size:12.5px;border:1.5px solid var(--line2);background:var(--card-2);color:var(--ink2);border-radius:20px;padding:2px 11px;white-space:nowrap;}
+  .chip.warm{background:var(--warm-tint);border-color:var(--warm-soft);color:var(--warm-deep);}
+  .chip.cool{background:var(--cool-tint);border-color:var(--cool-soft);color:var(--cool-deep);}
+  .chip.sage{background:var(--sage-soft);border-color:var(--sage);color:#4c7a45;}
+  .chip.gold{background:var(--gold-soft);border-color:var(--gold);color:#9a7420;}
+
+  /* tables */
+  table{width:100%;border-collapse:collapse;background:var(--card);border-radius:16px;overflow:hidden;border:1px solid var(--line);box-shadow:0 4px 14px var(--shadow-soft);font-size:13.5px;}
+  th{font-family:var(--fd);font-weight:400;font-size:13.5px;text-align:left;background:var(--card-2);color:var(--ink2);padding:10px 14px;border-bottom:1.5px solid var(--line2);}
+  td{padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  td b{font-family:var(--fd);font-weight:400;}
+
+  /* value: do / don't */
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .do,.dont{border-radius:18px;padding:16px 18px;border:1.5px solid;}
+  .do{background:var(--cool-tint);border-color:var(--cool-soft);}
+  .dont{background:var(--warm-tint);border-color:var(--warm-soft);}
+  .do h3{color:var(--cool-deep);} .dont h3{color:var(--warm-deep);}
+  .do ul,.dont ul{margin:6px 0 0;padding-left:18px;font-size:13.5px;}
+  .do li,.dont li{margin-bottom:5px;}
+
+  .ledger{margin-top:14px;background:var(--card);border:1.5px dashed var(--line2);border-radius:18px;padding:16px 20px;display:flex;gap:14px;align-items:flex-start;}
+  .ledger .ico{font-size:26px;flex:none;}
+  .ledger b{font-family:var(--fd);font-weight:400;color:var(--warm-deep);}
+  .ledger p{margin:2px 0 0;font-size:13.5px;color:var(--ink);}
+
+  /* decision grid */
+  .dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;}
+  .dcard{background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:14px 16px;box-shadow:0 4px 14px var(--shadow-soft);}
+  .dcard .dn{font-family:var(--fl);font-weight:700;font-size:12px;color:#fff;background:var(--warm);border-radius:8px;padding:1px 8px;display:inline-block;}
+  .dcard h3{font-size:15.5px;margin:8px 0 6px;}
+  .dcard p{margin:0;font-size:12.8px;color:var(--ink2);}
+  .dcard .alt{margin-top:8px;font-size:12px;color:var(--ink3);}
+  .dcard .alt s{color:var(--ink3);}
+
+  /* flow diagram */
+  .flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;justify-content:center;margin:18px 0 8px;}
+  .fcol{display:flex;flex-direction:column;gap:10px;justify-content:center;}
+  .fbox{background:var(--card);border:1.5px solid var(--line2);border-radius:14px;padding:10px 14px;box-shadow:0 3px 10px var(--shadow-soft);min-width:170px;text-align:center;}
+  .fbox b{font-family:var(--fd);font-weight:400;font-size:14.5px;display:block;}
+  .fbox small{font-size:11.5px;color:var(--ink2);display:block;line-height:1.45;margin-top:2px;}
+  .fbox.src{border-color:var(--cool-soft);background:var(--cool-tint);}
+  .fbox.rec{border-color:var(--warm-soft);background:var(--warm-tint);}
+  .fbox.post{border-style:dashed;}
+  .fbox.vault{border-color:var(--sage);background:var(--sage-soft);}
+  .farrow{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 8px;color:var(--warm-deep);font-family:var(--fd);}
+  .farrow span{font-size:20px;line-height:1;}
+  .farrow small{font-size:10.5px;color:var(--ink2);max-width:90px;text-align:center;line-height:1.4;}
+
+  /* schema / code */
+  pre{background:#3a352b;color:#f2ead9;border-radius:16px;padding:18px 20px;font-size:12.5px;line-height:1.6;overflow-x:auto;font-family:'Quicksand',monospace;box-shadow:0 6px 18px var(--shadow);}
+  pre .c{color:#b6ac98;} pre .k{color:#f0b27e;} pre .hl{color:#9fd0e8;}
+
+  /* roadmap timeline */
+  .timeline{position:relative;margin-top:18px;}
+  .timeline::before{content:"";position:absolute;left:19px;top:8px;bottom:8px;border-left:3px dashed var(--line2);}
+  .phase{position:relative;padding-left:56px;margin-bottom:22px;}
+  .pnum{position:absolute;left:0;top:0;width:40px;height:40px;border-radius:50%;background:var(--cool);color:#fff;border:3px solid #fff;
+    display:flex;align-items:center;justify-content:center;font-family:var(--fd);font-size:17px;box-shadow:0 4px 10px rgba(74,146,178,.35);}
+  .phase.mvp .pnum{background:var(--warm);box-shadow:0 4px 12px rgba(207,106,58,.45);}
+  .pcard{background:var(--card);border:1.5px solid var(--line);border-radius:18px;padding:16px 20px;box-shadow:0 4px 14px var(--shadow-soft);}
+  .phase.mvp .pcard{border-color:var(--warm-soft);box-shadow:0 8px 24px var(--shadow);}
+  .phead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px;}
+  .phead h3{font-size:18px;margin:0;}
+  .effort{font-family:var(--fd);font-size:12.5px;color:#fff;background:var(--cool-deep);border-radius:9px;padding:2px 10px;}
+  .phase.mvp .effort{background:var(--warm-deep);}
+  .pgoal{font-size:13px;color:var(--ink2);margin:0 0 10px;}
+  .tasks{display:flex;flex-direction:column;gap:6px;}
+  .task{display:flex;gap:9px;align-items:baseline;font-size:13.5px;background:var(--card-2);border:1px solid var(--line);border-radius:11px;padding:7px 12px;}
+  .task .tn{font-family:var(--fd);font-size:12px;color:var(--warm-deep);flex:none;}
+  .task .te{margin-left:auto;flex:none;font-size:11.5px;color:var(--cool-deep);font-family:var(--fd);white-space:nowrap;}
+  .dod{margin-top:12px;background:var(--sage-soft);border:1.5px solid var(--sage);border-radius:13px;padding:10px 14px;font-size:13px;}
+  .dod b{font-family:var(--fd);font-weight:400;color:#4c7a45;display:block;margin-bottom:4px;}
+  .dod ul{margin:0;padding-left:4px;list-style:none;}
+  .dod li{margin-bottom:3px;}
+  .dod li::before{content:"☐ ";color:#4c7a45;}
+  .excluded{margin-top:10px;font-size:12.5px;color:var(--ink2);}
+  .excluded b{font-family:var(--fd);font-weight:400;color:var(--ink2);}
+
+  .quote{background:var(--warm-tint);border:1.5px solid var(--warm-soft);border-radius:14px;padding:11px 16px;font-size:13.5px;margin:0 0 12px;}
+  .quote b{font-family:var(--fd);font-weight:400;color:var(--warm-deep);}
+
+  /* bars summary */
+  .bars{display:flex;flex-direction:column;gap:8px;margin-top:14px;}
+  .bar{display:grid;grid-template-columns:200px 1fr 90px;align-items:center;gap:12px;font-size:13px;}
+  .bar .bname{font-family:var(--fd);}
+  .bar .btrack{height:14px;background:var(--card-2);border:1px solid var(--line2);border-radius:8px;overflow:hidden;}
+  .bar .bfill{height:100%;border-radius:8px;background:linear-gradient(90deg,var(--cool),var(--cool-deep));}
+  .bar.mvp .bfill{background:linear-gradient(90deg,var(--warm),var(--warm-deep));}
+  .bar .bdays{text-align:right;color:var(--ink2);font-family:var(--fd);font-size:12.5px;}
+
+  /* open questions */
+  .qlist{display:flex;flex-direction:column;gap:7px;}
+  .q{display:flex;gap:10px;align-items:baseline;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:9px 14px;font-size:13.5px;}
+  .q::before{content:"？";font-family:var(--fd);color:var(--gold);flex:none;}
+
+  /* discussion log */
+  ol.log{margin:0;padding-left:0;list-style:none;counter-reset:log;}
+  ol.log li{counter-increment:log;position:relative;padding:9px 14px 9px 44px;background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:7px;font-size:13.5px;}
+  ol.log li::before{content:counter(log);position:absolute;left:10px;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:50%;
+    background:var(--card-2);border:1.5px solid var(--line2);display:flex;align-items:center;justify-content:center;font-family:var(--fd);font-size:12px;color:var(--ink2);}
+  ol.log li b{font-family:var(--fd);font-weight:400;color:var(--warm-deep);}
+
+  .footer{margin-top:50px;text-align:center;font-size:12.5px;color:var(--ink3);}
+  @media(max-width:720px){.duo{grid-template-columns:1fr;}.hero{flex-wrap:wrap;}.hero .meta{margin-left:0;text-align:left;}
+    .bar{grid-template-columns:130px 1fr 70px;}.flow{flex-direction:column;align-items:center;}.farrow{transform:rotate(90deg);padding:8px 0;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <span class="logo"></span>
+    <div>
+      <h1>HeartPin 개발 로드맵</h1>
+      <p>백엔드 범주·단계 / 모바일 개선 / 저장·전송 아키텍처 결정 기록</p>
+    </div>
+    <div class="meta">작성 <b>2026-06-05</b><br/>기준: 프론트 프로토타입 완성<br/>(데이터 메모리 상태)</div>
+  </header>
+
+  <!-- 1. 서비스 가치 -->
+  <section>
+    <div class="sec-kicker">1 · SERVICE</div>
+    <h2>서비스 정의와 핵심 가치</h2>
+    <p class="sec-sub">갤러리에 흩어진 사진을 예쁘게 정리하며 기록하는 커플 전용 웹 — Trip → Day → Spot → Moment</p>
+    <div class="duo">
+      <div class="do">
+        <h3>맡는 것 ✅</h3>
+        <ul>
+          <li><b>기록으로서의 제공</b> — 압축본 + 설명 + 여정 트리의 영구 보존</li>
+          <li><b>서로 간 전송의 용이성</b> — 클라우드 경유 중계(우체통)</li>
+          <li><b>소재 추적</b> — 어떤 사진이 어디(폰·PC·하드)에 있는지 아는 장부</li>
+        </ul>
+      </div>
+      <div class="dont">
+        <h3>맡지 않는 것 ❌</h3>
+        <ul>
+          <li><b>원본 백업</b> — 원본은 각자 로컬/외장하드에서 관리</li>
+          <li>원본의 영구 클라우드 보관</li>
+          <li>타인 사진의 운영(SaaS) — 프라이버시상 배제</li>
+        </ul>
+      </div>
+    </div>
+    <div class="ledger">
+      <span class="ico">📒</span>
+      <div>
+        <b>핵심 개념 — 원장(臺帳, Ledger) 모델</b>
+        <p>원본이 어디에 흩어져 있든, <b>"무엇이 어디에 있고 어디로 가야 하는지"를 아는 유일한 장부</b>가 된다.
+        기록은 공동, 원본은 소유자 — 콘텐츠 해시(SHA-256)가 원본↔압축본↔기록을 잇는다.
+        동기화 규칙은 단 하나: <b>"외장하드(정본 보관소)가 전체 집합을 갖게 하라."</b></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. 결정 -->
+  <section>
+    <div class="sec-kicker">2 · DECISIONS</div>
+    <h2>핵심 아키텍처 결정</h2>
+    <p class="sec-sub">결정 + 근거 + 배제한 대안 (ADR)</p>
+    <div class="dgrid">
+      <div class="dcard"><span class="dn">D1</span><h3>기록은 클라우드 필수</h3>
+        <p>둘이 어디서나 봐야 함 — 로컬은 남이 못 보고, 외장하드는 꽂혀 있을 때만 존재</p>
+        <div class="alt">배제: <s>로컬 전용(IndexedDB)</s> — 기기 1대에 갇힘</div></div>
+      <div class="dcard"><span class="dn">D2</span><h3>클라우드는 "각 커플의 것" (BYO)</h3>
+        <p>운영자가 타인의 사진을 관리하지 않음 — 개인정보 책임·비용·유출 리스크 구조적 제거</p>
+        <div class="alt">배제: <s>운영형 SaaS</s></div></div>
+      <div class="dcard"><span class="dn">D3</span><h3>1차 백엔드 = Supabase (서울)</h3>
+        <p>DB+Storage+Auth 올인원, 서버 코드 최소, 오픈소스(락인 없음), 무료 티어</p>
+        <div class="alt">배제: <s>FastAPI 상시 서버</s> <s>Firebase</s> <s>PocketBase</s></div></div>
+      <div class="dcard"><span class="dn">D4</span><h3>StorageAdapter 추상화 + 내보내기</h3>
+        <p>백엔드 교체 가능(추후 Google Drive 어댑터) · "내 데이터는 언제든 들고 나간다"</p>
+        <div class="alt">배제: <s>Supabase 직결 하드코딩</s></div></div>
+      <div class="dcard"><span class="dn">D5</span><h3>클라우드엔 압축본만</h3>
+        <p>display 2000px + thumb 400px — 12MB → ~330KB (97%↓), 무료 1GB로 ~3,000장</p>
+        <div class="alt">배제: <s>원본 업로드</s> — 비용·"백업 아님" 정체성 충돌</div></div>
+      <div class="dcard"><span class="dn">D6</span><h3>정본 보관소 = 공동 외장하드 1곳</h3>
+        <p>위치가 N개여도 규칙이 하나로 수렴 — 복잡도 폭발 방지</p>
+        <div class="alt">배제: <s>NAS</s>(사용자 결정) <s>전 위치 대등 동기화</s></div></div>
+      <div class="dcard"><span class="dn">D7</span><h3>공유 계정 1개 + 캐릭터 owner</h3>
+        <p>2인 전용 — 가입/초대/권한 불필요. 업로드 시 바라/뇽이 토글로 소유자 기록</p>
+        <div class="alt">배제: <s>계정 2개+권한 모델</s> — 과함</div></div>
+      <div class="dcard"><span class="dn">D8</span><h3>보관함 연결 = FS Access API</h3>
+        <p>웹앱이 로컬 파일을 읽고·쓰고·지울 유일한 표준. 핸들 영속화로 재연결 1클릭</p>
+        <div class="alt">제약: 데스크톱 크롬/엣지 전용</div></div>
+      <div class="dcard"><span class="dn">D9</span><h3>전송 = 클라우드 경유 "우체통"</h3>
+        <p>원본 임시 중계 → 수령 후 삭제. 폰↔PC가 시간차를 두고 만나도 됨</p>
+        <div class="alt">배제: <s>P2P(WebRTC)</s> — 동시 접속 필요, 복잡도 과다</div></div>
+      <div class="dcard"><span class="dn">D10</span><h3>모바일: 웹+PWA → Capacitor 앱</h3>
+        <p>적응형 셸을 한 코드베이스에서 — 같은 코드 ~90% 재사용으로 스토어 앱까지</p>
+        <div class="alt">배제: <s>React Native 재작성</s> — +1~2달</div></div>
+      <div class="dcard"><span class="dn">D11</span><h3>서버 코드는 Vercel Functions 최소</h3>
+        <p>Supabase가 API 대체. LLM/Mapbox 키 은닉 등 필요한 함수만 (JS·Python 혼용 가능)</p>
+        <div class="alt">FastAPI는 Python 친숙성 사안일 뿐 — 필수 아님</div></div>
+    </div>
+  </section>
+
+  <!-- 3. 구조 -->
+  <section>
+    <div class="sec-kicker">3 · ARCHITECTURE</div>
+    <h2>시스템 구조</h2>
+    <p class="sec-sub">데이터 흐름 — 모든 이동은 클라우드를 경유하고, 정본은 외장하드로 모인다</p>
+
+    <div class="card">
+      <div class="flow">
+        <div class="fcol">
+          <div class="fbox src"><b>📱 바라 폰</b><small>출발지 (소스)</small></div>
+          <div class="fbox src"><b>📱 뇽이 폰</b><small>출발지 (소스)</small></div>
+          <div class="fbox src"><b>💻 PC (각자)</b><small>업로드 + 정리 세션</small></div>
+        </div>
+        <div class="farrow"><span>→</span><small>압축본 (즉시)<br/>원본 (전송 대기)</small></div>
+        <div class="fcol">
+          <div class="fbox rec"><b>☁️ 기록 (영구)</b><small>압축본 + 메타 + 여정 트리<br/>커플 소유 Supabase</small></div>
+          <div class="fbox post"><b>📮 우체통 (임시)</b><small>원본 릴레이<br/>수령 확인 후 삭제</small></div>
+        </div>
+        <div class="farrow"><span>→</span><small>하드 연결 세션 때<br/>일괄 안착</small></div>
+        <div class="fcol">
+          <div class="fbox vault"><b>💾 공동 외장하드</b><small>정본 보관소 (유일)<br/>원본 전체 집합 + 기록 백업 JSON</small></div>
+          <div class="fbox"><b>🔄 개인 클라우드 (선택)</b><small>동기화 폴더 경유 — OS가 수행</small></div>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:22px;">위치별 역할 고정 <span class="chip warm">D6</span></h3>
+    <table>
+      <tr><th style="width:160px;">위치</th><th style="width:170px;">역할</th><th>서비스가 하는 일</th></tr>
+      <tr><td><b>공동 외장하드</b></td><td><span class="chip sage">정본 보관소 (유일)</span></td><td>빠진 사진을 큐로 수송 · 흐릿 삭제 실행 · 기록 백업</td></tr>
+      <tr><td>폰 (둘 다)</td><td><span class="chip cool">출발지 (소스)</span></td><td>업로드 받기 · 하드 안착 후 <b>"폰에서 지워도 안전 ✓"</b> 표시 (웹은 카메라롤 삭제 불가)</td></tr>
+      <tr><td>개인 클라우드</td><td><span class="chip">개인 사본 (선택)</span></td><td>직접 연동 X — 동기화 폴더에 써주면 OS가 올림</td></tr>
+      <tr><td>서비스 클라우드</td><td><span class="chip warm">기록 + 우체통</span></td><td>압축본·메타 영구 / 원본은 전송 동안만</td></tr>
+    </table>
+
+    <h3 style="margin-top:22px;">데이터 모델 (Supabase 스키마 초안)</h3>
+<pre>trips(id, region, title, start_date, date_label, tags, created_at)
+days(id, trip_id, label, date)
+spots(id, day_id, name, time, lat, lng, mood, guide, reaction, sort_order)
+moments(
+  id, spot_id, display_url, thumb_url, label, ratio, tint,
+  <span class="hl">content_hash</span>,        <span class="c">-- SHA-256: 원본↔압축본↔기록 연결 (Phase 1부터 필수!)</span>
+  original_name, original_size, taken_at, lat, lng,
+  <span class="hl">owner</span>,               <span class="c">-- 'bara' | 'nyong' (누구의 원본인지)</span>
+  <span class="hl">original_status</span>      <span class="c">-- kept | discard_pending | discarded | lost</span>
+)
+inbox_items(id, kind, taken_at, lat, lng, display_url, thumb_url,
+            label, blur, content_hash, original_name, owner)
+
+<span class="c">-- Phase 3에서 추가</span>
+photo_copies(photo_id, location, status)        <span class="c">-- 위치별 사본 추적</span>
+transfer_queue(id, photo_id, dest, tmp_url, status, expires_at)  <span class="c">-- 우체통</span></pre>
+    <p style="font-size:12.5px;color:var(--ink2);">버킷 <code>photos/</code>는 private + 서명 URL/RLS (기본 비공개) ·
+    ⚠️ <b>content_hash·owner는 Phase 1부터</b> — 나중에 넣으면 기존 사진의 해시가 없다 ·
+    연결 정보는 환경변수(<code>VITE_SUPABASE_URL/ANON_KEY</code>)로 — BYO 배포의 전제</p>
+  </section>
+
+  <!-- 4. 로드맵 -->
+  <section>
+    <div class="sec-kicker">4 · ROADMAP</div>
+    <h2>개발 로드맵</h2>
+    <p class="sec-sub">Phase 1이 MVP — 나머지는 독립적으로 얹는 단계</p>
+
+    <div class="timeline">
+
+      <div class="phase mvp">
+        <div class="pnum">1</div>
+        <div class="pcard">
+          <div class="phead"><h3>MVP — "기록의 시작"</h3><span class="effort">~5–6일</span><span class="chip warm">🎯 지금 여기</span></div>
+          <p class="quote"><b>MVP 정의(확정)</b> — 외장하드 연결로 웹에서 데이터를 업로드해서 기록하고,
+          상대방도 접속 가능하게 하여 <b>양쪽 모두 업로드</b>할 수 있도록 한다.</p>
+          <div class="tasks">
+            <div class="task"><span class="tn">1-1</span>Supabase 셋업 — 스키마·RLS·private 버킷·공유 계정<span class="te">~1일</span></div>
+            <div class="task"><span class="tn">1-2</span>StorageAdapter + 데이터 레이어 교체 (메모리 → 어댑터 CRUD)<span class="te">~1.5–2일</span></div>
+            <div class="task"><span class="tn">1-3</span>업로드 파이프라인 — 압축(2000px/400px) + EXIF + 해시 + owner 토글 + 중복 감지<span class="te">~1일</span></div>
+            <div class="task"><span class="tn">1-4</span>보관함(외장하드) 연결 — 스캔/매칭·새 사진 복사·흐릿 삭제 큐·기록 백업 JSON<span class="te">~1.5일</span></div>
+            <div class="task"><span class="tn">1-5</span>로그인 화면 + Vercel 배포 연결<span class="te">~0.5일</span></div>
+          </div>
+          <div class="dod"><b>완료 기준 (DoD)</b>
+            <ul>
+              <li>두 사람이 각자 PC에서 로그인 → 업로드 → 기록 생성, 다른 기기에서도 유지</li>
+              <li>업로드 시 owner 기록 + 동일 파일 중복 감지</li>
+              <li>하드 연결 → 새 사진 복사 + 흐릿 삭제 실행(설명·기록은 보존) + 백업 JSON</li>
+              <li>하드 분리 상태에서도 정상 동작, 할 일은 큐에 적재</li>
+            </ul>
+          </div>
+          <p class="excluded"><b>의도적으로 뺀 것:</b> 우체통(원본 릴레이) · 모바일 최적화(기본 반응형만) · 보관 현황 대시보드 · LLM/역지오코딩</p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="pnum">2</div>
+        <div class="pcard">
+          <div class="phead"><h3>모바일 경험</h3><span class="effort">~4–5일</span></div>
+          <p class="pgoal">같은 코드베이스에서 조건부 렌더링 — 셸만 두 벌, 컴포넌트는 공유. 이 UI가 Phase 4 스토어 앱 화면이 됨</p>
+          <div class="tasks">
+            <div class="task"><span class="tn">2-1</span>적응형 모바일 셸 — <b>하단 탭바</b>(홈·지도·＋·정리함) + 지도 풀스크린 + <b>바텀시트</b> 기록<span class="te">~3일</span></div>
+            <div class="task"><span class="tn">2-2</span>PWA화 — manifest·서비스워커·iOS 설치 안내 (7일 저장소 퇴거 회피)<span class="te">~0.5–1일</span></div>
+            <div class="task"><span class="tn">2-3</span>모바일 업로드 — Wi-Fi 옵션·진행률·iOS HEIC/EXIF 실기기 검증<span class="te">~1일</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="pnum">3</div>
+        <div class="pcard">
+          <div class="phead"><h3>전송·공동관리 고도화</h3><span class="effort">~3–4일</span></div>
+          <p class="pgoal">원장 모델의 완성 — 소재 추적과 이동 지시</p>
+          <div class="tasks">
+            <div class="task"><span class="tn">3-1</span>우체통(원본 릴레이) — 폰 원본 → 하드 일괄 안착 → 클라우드 삭제. 배치 용량 제한<span class="te">~1.5일</span></div>
+            <div class="task"><span class="tn">3-2</span>보관 현황 대시보드 — "바라 800 · 뇽이 900 · 하드 1,100 · ⚠️ 원본 없음 3"<span class="te">~1일</span></div>
+            <div class="task"><span class="tn">3-3</span>"폰에서 지워도 안전" 목록 — 폰 용량 정리 가치<span class="te">~0.5일</span></div>
+            <div class="task"><span class="tn">3-4</span>원본 찾기 / 사람 간 원본 요청 ("원본: 바라 PC" 뱃지)<span class="te">~1일</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="pnum">4</div>
+        <div class="pcard">
+          <div class="phead"><h3>스토어 앱 (Capacitor)</h3><span class="effort">+1.5–2주</span></div>
+          <p class="pgoal">웹 코드 ~90% 재사용. Apple $99/년 + Google $25 · 업데이트마다 재심사</p>
+          <div class="tasks">
+            <div class="task"><span class="tn">4-1</span>Capacitor 래핑 + 빌드 환경 (Xcode/Android Studio)</div>
+            <div class="task"><span class="tn">4-2</span>네이티브: <b>카메라롤 통합</b>(EXIF 확실 보존) · <b>폰에서 흐릿 사진 삭제</b>(웹 불가 기능) · <b>푸시 알림</b></div>
+            <div class="task"><span class="tn">4-3</span>스토어 출시 — ⚠️ "웹뷰만 감싼 앱" 리젝 회피 위해 4-2 포함 후 심사</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="pnum">5</div>
+        <div class="pcard">
+          <div class="phead"><h3>개방과 확장</h3><span class="effort">수시 · 선택</span></div>
+          <div class="tasks">
+            <div class="task"><span class="tn">5-1</span>BYO 템플릿 공개 — README + schema.sql + [Deploy to Vercel] + 셋업 마법사<span class="te">~1일</span></div>
+            <div class="task"><span class="tn">5-2</span>Google Drive 어댑터 — 비개발자용 (구글 로그인+공유 폴더). OAuth 앱 검증 행정<span class="te">+3–4일</span></div>
+            <div class="task"><span class="tn">5-3</span>E2EE 클라이언트 암호화 — 키 공유 방식 미정, 보류<span class="te">미정</span></div>
+            <div class="task"><span class="tn">5-4</span>Mapbox 전환 + 역지오코딩 ("장소 1·2" → 실제 지명)<span class="te">~2–3일</span></div>
+            <div class="task"><span class="tn">5-5</span>LLM 대사 생성 — Vercel Function(JS/Python)으로 키 은닉<span class="te">~1–2일</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:8px;">전체 일정 요약</h3>
+    <div class="card">
+      <div class="bars">
+        <div class="bar mvp"><span class="bname">Phase 1 · MVP</span><span class="btrack"><span class="bfill" style="width:40%"></span></span><span class="bdays">~5–6일</span></div>
+        <div class="bar"><span class="bname">Phase 2 · 모바일</span><span class="btrack"><span class="bfill" style="width:33%"></span></span><span class="bdays">~4–5일</span></div>
+        <div class="bar"><span class="bname">Phase 3 · 전송·관리</span><span class="btrack"><span class="bfill" style="width:27%"></span></span><span class="bdays">~3–4일</span></div>
+        <div class="bar"><span class="bname">Phase 4 · 스토어 앱</span><span class="btrack"><span class="bfill" style="width:100%"></span></span><span class="bdays">+1.5–2주</span></div>
+        <div class="bar"><span class="bname">Phase 5 · 개방·확장</span><span class="btrack"><span class="bfill" style="width:15%;background:linear-gradient(90deg,var(--gold),#d9a93f);"></span></span><span class="bdays">수시</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. 제약 -->
+  <section>
+    <div class="sec-kicker">5 · CONSTRAINTS</div>
+    <h2>제약과 리스크</h2>
+    <p class="sec-sub">정직한 한계 — 설계가 이미 수용한 것들</p>
+    <table>
+      <tr><th style="width:210px;">항목</th><th>내용</th><th style="width:260px;">대응</th></tr>
+      <tr><td><b>FS Access API</b></td><td>데스크톱 크롬/엣지 전용 (맥 사파리·모바일 불가)</td><td>기능 감지로 PC 크롬에서만 노출. "정리 세션 = PC" UX로 수용</td></tr>
+      <tr><td><b>웹의 카메라롤 삭제 불가</b></td><td>"지워도 안전" 표시까지가 웹의 한계</td><td>Phase 4 네이티브 앱에서 해소</td></tr>
+      <tr><td><b>iOS 웹 사진 선택기</b></td><td>HEIC 변환·메타데이터 처리가 OS 버전마다 다름</td><td>Phase 2 실기기 검증. 위치 빠지면 "위치 없음" 플로우 수용</td></tr>
+      <tr><td><b>모바일 백그라운드 업로드</b></td><td>업로드 중 브라우저 유지 필요</td><td>진행률 UI + Wi-Fi 옵션 → Phase 4에서 개선</td></tr>
+      <tr><td><b>iOS 저장소 7일 퇴거</b></td><td>사파리 미방문 시 세션 소실 (데이터는 클라우드라 무손실)</td><td>PWA 설치 권장으로 회피</td></tr>
+      <tr><td><b>Supabase 무료 1GB</b></td><td>압축본 ~3,000장 (여행 15회 분량)</td><td>초과 시 Pro $25/월. 우체통 스파이크는 배치 제한/R2</td></tr>
+      <tr><td><b>Apple 심사</b></td><td>웹뷰 래핑 앱 리젝 리스크</td><td>카메라롤·푸시 등 네이티브 기능 포함 후 심사</td></tr>
+      <tr><td><b>Drive 어댑터 행정</b></td><td>Google OAuth 앱 검증 (방침 문서·시연 영상)</td><td>Phase 5에서 확산 의지 확정 후 진행</td></tr>
+    </table>
+  </section>
+
+  <!-- 6. 미결 -->
+  <section>
+    <div class="sec-kicker">6 · OPEN QUESTIONS</div>
+    <h2>미결 사항 (추후 논의)</h2>
+    <div class="qlist" style="margin-top:14px;">
+      <div class="q">압축 파라미터 확정 — 실사진으로 2000px/q80 화질·용량 검증</div>
+      <div class="q">유사(비동일) 사진 중복 감지 — perceptual hash 도입 여부</div>
+      <div class="q">E2EE 도입 시점 — 암호화 키를 둘이 어떻게 공유할지 (합의 단어? QR?)</div>
+      <div class="q">record-backup.json 포맷/주기 — 전체 스냅샷 vs 증분</div>
+      <div class="q">정리함 모바일 UX — 작은 화면에서의 다중 선택·배치 흐름</div>
+      <div class="q">스토어 출시 시 퍼블리셔 행정 — 개인정보처리방침 문안 (데이터 무접촉 설명)</div>
+      <div class="q">LLM 대사 생성 키 관리 — BYO 모델에서 각자 키 입력 vs 기본 비활성</div>
+    </div>
+  </section>
+
+  <!-- 7. 논의 기록 -->
+  <section>
+    <div class="sec-kicker">7 · DISCUSSION LOG</div>
+    <h2>논의 기록 요약</h2>
+    <p class="sec-sub">결정에 이른 경로 — 추후 "왜 이렇게 했지?"의 답</p>
+    <ol class="log">
+      <li><b>백엔드 스택</b> — FastAPI 필요? → Supabase로 서버 코드 최소화. Node=JavaScript(Java 아님). 필요 함수만 Vercel Functions(JS·Python 혼용)</li>
+      <li><b>프론트만 영속화?</b> → localStorage/IndexedDB는 "그 기기 그 브라우저"에 갇힘 → 클라우드 필요</li>
+      <li><b>사진 용량</b> → 원본 안 올림. 압축본만(97% 절감). 원본 보관은 폰/iCloud/하드의 몫</li>
+      <li><b>"2명 업로드"는 공수 변수 아님</b> — 공유 계정이면 코드 동일. 진짜 분기는 "클라우드 vs 로컬"</li>
+      <li><b>공동관리</b> → 원장 모델: 해시 + owner + original_status. 흐릿 삭제는 "삭제 예약 큐"로 비동기 처리</li>
+      <li><b>외장하드 vs 각자 관리</b> → 두 옵션이 아니라 "보관함 연결" 단일 메커니즘 — 어떤 폴더를 연결하느냐의 차이</li>
+      <li><b>모바일→하드 전송</b> → 클라우드 릴레이(우체통)로 가능. 동시 사용 가능 — 단 역할 고정(정본=하드 1곳)</li>
+      <li><b>운영 책임</b> → 타인 사진 관리 거부 → BYO-cloud 템플릿 배포 모델 확정</li>
+      <li><b>Supabase 필수?</b> → 아니다, "공수 최소 선택". 어댑터+내보내기로 락인 차단. 비개발자의 답은 Drive 어댑터</li>
+      <li><b>모바일</b> → 적응형 웹+PWA 먼저, 스토어 앱은 Capacitor 래핑. 하단 탭바·바텀시트를 한 코드베이스 조건부 렌더링으로 — 지금 한꺼번에 개발 가능</li>
+    </ol>
+  </section>
+
+  <div class="footer">HeartPin · 바라와 뇽이의 여정 기록 🧡💙 · 이 문서는 <code>docs/ROADMAP.md</code>와 동일 내용의 시각화 버전입니다</div>
+</div>
+</body>
+</html>
