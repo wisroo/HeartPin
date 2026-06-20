@@ -2,3 +2,6 @@ node_modules
 dist
 .DS_Store
 *.local
+
+# Phase 0 local vault fallback (외장하드 미연결 시)
+vault/

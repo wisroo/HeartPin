@@ -23,7 +23,9 @@ export default function Journey({ trip, onClose }) {
     const map = L.map(elRef.current, { zoomControl: false, attributionControl: true, minZoom: 3 });
     L.tileLayer(TILES, { attribution: ATTR, subdomains: "abcd", maxZoom: 19 }).addTo(map);
     mapRef.current = map; lgRef.current = L.layerGroup().addTo(map);
-    map.fitBounds(spots.map((s) => [s.lat, s.lng]), { padding: [140, 140] });
+    const locs = spots.filter((s) => s.lat != null);
+    if (locs.length) map.fitBounds(locs.map((s) => [s.lat, s.lng]), { padding: [140, 140] });
+    else map.setView([36.2, 127.9], 7); // 위치 없는 스팟만 있는 여행 — 기본 뷰
     const onKey = (e) => {
       if (e.key === "Escape") onClose();
       else if (e.key === "ArrowRight") setStep((s) => Math.min(total - 1, s + 1));
@@ -38,18 +40,20 @@ export default function Journey({ trip, onClose }) {
   useEffect(() => {
     const map = mapRef.current, lg = lgRef.current; if (!map) return;
     lg.clearLayers();
-    const geo = spots.map((s) => [s.lat, s.lng]);
-    L.polyline(smooth(geo, 16), { color: "#e3814f", weight: 3.5, opacity: 0.4, dashArray: "1 11", lineCap: "round" }).addTo(lg);
+    const geo = spots.filter((s) => s.lat != null).map((s) => [s.lat, s.lng]);
+    if (geo.length > 1) L.polyline(smooth(geo, 16), { color: "#e3814f", weight: 3.5, opacity: 0.4, dashArray: "1 11", lineCap: "round" }).addTo(lg);
     const upto = step > spots.length ? spots.length - 1 : sIdx;
-    if (upto >= 1) L.polyline(smooth(geo.slice(0, upto + 1), 16), { color: "#e3814f", weight: 4.5, opacity: 0.95, dashArray: "1 11", lineCap: "round" }).addTo(lg);
+    const doneGeo = spots.slice(0, upto + 1).filter((s) => s.lat != null).map((s) => [s.lat, s.lng]);
+    if (upto >= 1 && doneGeo.length > 1) L.polyline(smooth(doneGeo, 16), { color: "#e3814f", weight: 4.5, opacity: 0.95, dashArray: "1 11", lineCap: "round" }).addTo(lg);
     spots.forEach((s, i) => {
+      if (s.lat == null) return; // 위치 없는 스팟은 핀 생략 (자막·사진은 그대로 진행)
       const state = isSpot && i === sIdx ? "active" : ((step > spots.length || i < sIdx) ? "done" : "");
       L.marker([s.lat, s.lng], { icon: pinIcon(i + 1, s.name, state), zIndexOffset: i === sIdx ? 1000 : 0 }).addTo(lg);
     });
-    if (isSpot) {
+    if (isSpot && spot.lat != null) {
       L.marker([spot.lat, spot.lng], { icon: charIcon(), zIndexOffset: 2000, interactive: false }).addTo(lg);
       map.flyTo([spot.lat, spot.lng], 14, { duration: 2.0 });
-    } else {
+    } else if (geo.length) {
       map.flyToBounds(geo, { padding: [140, 140], duration: 1.4 });
     }
     setPhotoI(0);

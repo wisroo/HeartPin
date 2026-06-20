@@ -161,7 +161,7 @@
       <h1>HeartPin 개발 로드맵</h1>
       <p>백엔드 범주·단계 / 모바일 개선 / 저장·전송 아키텍처 결정 기록</p>
     </div>
-    <div class="meta">작성 <b>2026-06-05</b><br/>기준: 프론트 프로토타입 완성<br/>(데이터 메모리 상태)</div>
+    <div class="meta">작성 <b>2026-06-05</b> · 갱신 <b>2026-06-06</b><br/>기준: 프론트 프로토타입 완성<br/>(Phase 0 — 당일 데모 재편)</div>
   </header>
 
   <!-- 1. 서비스 가치 -->
@@ -237,6 +237,9 @@
       <div class="dcard"><span class="dn">D11</span><h3>서버 코드는 Vercel Functions 최소</h3>
         <p>Supabase가 API 대체. LLM/Mapbox 키 은닉 등 필요한 함수만 (JS·Python 혼용 가능)</p>
         <div class="alt">FastAPI는 Python 친숙성 사안일 뿐 — 필수 아님</div></div>
+      <div class="dcard"><span class="dn">D12</span><h3>Phase 0 데모 = 로컬 Express 서버 (임시)</h3>
+        <p>6시간 시연: 폰 2대 업로드→지도 기록→하드 저장. 하드가 서버에 직결 → Node fs 직접 쓰기로 FS API·우체통 없이 "폰→하드"가 한 홉. record.json 필드 = Supabase 스키마(전환 보장)</p>
+        <div class="alt">배제: <s>Supabase 압축 일정</s>(6시간 내 불가) <s>FS Access API</s>(폰 미지원)</div></div>
     </div>
   </section>
 
@@ -264,6 +267,25 @@
           <div class="fbox"><b>🔄 개인 클라우드 (선택)</b><small>동기화 폴더 경유 — OS가 수행</small></div>
         </div>
       </div>
+    </div>
+
+    <h3 style="margin-top:22px;">Phase 0 데모 구조 (임시) <span class="chip gold">D12 · 2026-06-06</span></h3>
+    <div class="card">
+      <div class="flow">
+        <div class="fcol">
+          <div class="fbox src"><b>📱 폰 2대 (바라·뇽이)</b><small>같은 Wi-Fi로 접속<br/>업로드 + 열람</small></div>
+        </div>
+        <div class="farrow"><span>→</span><small>http://Mac IP:3300<br/>(서버가 주소 자동 출력)</small></div>
+        <div class="fcol">
+          <div class="fbox rec"><b>💻 Mac 로컬 서버 (Express)</b><small>EXIF·SHA-256·압축(2000/400px WebP)<br/>앱·압축본 서빙 · 3초 폴링 동기화</small></div>
+        </div>
+        <div class="farrow"><span>→</span><small>Node fs<br/>직접 쓰기</small></div>
+        <div class="fcol">
+          <div class="fbox vault"><b>💾 외장하드 /HeartPin</b><small>originals/ · display/ · thumb/<br/>record.json (Supabase 스키마와 동일 필드)</small></div>
+        </div>
+      </div>
+      <p style="font-size:12.5px;color:var(--ink2);margin:10px 0 0;">클라우드 자리를 로컬 서버가 임시로 맡음 — 하드가 서버에 직결이라 우체통·FS API 없이 "폰→하드"가 한 홉.
+      <code>src/api.js</code>가 StorageAdapter 시임 — Phase 1 전환 = 이 구현 교체(Local→Supabase) + 일회성 마이그레이션. 다른 장소에선 폰 핫스팟으로 동일 데모 가능.</p>
     </div>
 
     <h3 style="margin-top:22px;">위치별 역할 고정 <span class="chip warm">D6</span></h3>
@@ -306,17 +328,47 @@ transfer_queue(id, photo_id, dest, tmp_url, status, expires_at)  <span class="c"
     <div class="timeline">
 
       <div class="phase mvp">
+        <div class="pnum">0</div>
+        <div class="pcard">
+          <div class="phead"><h3>데모 — "로컬 시연"</h3><span class="effort">~6시간</span><span class="chip warm">🎬 지금 여기 (06-06)</span></div>
+          <p class="quote"><b>데모 정의</b> — 두 사람이 폰으로 로컬 서비스에 접속해 사진을 올리면 <b>지도에 기록</b>되고,
+          원본·압축본·기록이 <b>연결된 외장하드에 저장</b>된다. 시연 + MVP 테스트 + 사진 정리의 시작.</p>
+          <p class="pgoal">재편 배경: 폰에 분산된 사진을 하드로 옮길 시간 부족 + 시연 우선 → 폰 직접 업로드 경로(원 Phase 2~3 일부)를 로컬 서버 방식으로 앞당김 (D12)</p>
+          <div class="tasks">
+            <div class="task"><span class="tn">0-1</span>로컬 서버 — Express·multer·sharp·exifr: 업로드→EXIF·해시(서버 계산)→WebP 압축→하드 저장·record.json<span class="te">~1h</span></div>
+            <div class="task"><span class="tn">0-2</span>데이터 레이어 교체 — 메모리 → <b>src/api.js(어댑터 시임)</b> + 3초 폴링 · 샘플 제거(빈 상태 시작)<span class="te">~1.5h</span></div>
+            <div class="task"><span class="tn">0-3a</span>업로드 배관 — 서버 업로드 · 가짜 메타 폴백 제거→'위치 없음'. <b>여기까지만 돼도 데모 성립</b><span class="te">~0.5h</span></div>
+            <div class="task"><span class="tn">0-3b</span>모바일 업로드 플로우(디자인 #4) — 런치(owner 1회 선택·D+N 자동, 2024-06-29=D+1)→고르기(OS 선택기)→읽는중(실진행률)→한 장씩 확인(세션 부트스트랩: 자동 이름→수정→근접 제안)→완료. 건너뛴 사진은 정리함<span class="te">~2h</span></div>
+            <div class="task"><span class="tn">0-4</span>실기기 테스트 — 아이폰 EXIF/HEIC · AP isolation · 방화벽 (0-3a 후 1차, 0-3b 후 2차)<span class="te">~1h</span></div>
+            <div class="task"><span class="tn">0-5</span>하드 폴더 검증 + 리허설 (압축)<span class="te">~0.5h</span></div>
+          </div>
+          <div class="dod"><b>완료 기준 (DoD)</b>
+            <ul>
+              <li>폰 2대 업로드 → 정리함 배치 → Mac 지도에 기록 표시</li>
+              <li>하드에 원본+압축본+record.json 생성, 서버 재시작에도 유지</li>
+              <li>해시 중복 감지 + owner(바라/뇽이) 기록</li>
+              <li>EXIF 없는 사진은 '위치 없음' 탭으로 (가짜 좌표 폴백 제거)</li>
+              <li>모바일: 런치→고르기→한 장씩 확인→완료 플로우로 업로드·배치 (디자인 #4)</li>
+            </ul>
+          </div>
+          <p class="excluded"><b>의도적으로 뺀 것:</b> Supabase · 로그인(같은 네트워크 한정 무인증) · FS Access API · 우체통 · 역지오코딩(세션 부트스트랩으로 대체) · 모바일 홈·지도 셸(와이어프레임 2·3번 미정 — 런치가 임시 진입점)</p>
+        </div>
+      </div>
+
+      <div class="phase">
         <div class="pnum">1</div>
         <div class="pcard">
-          <div class="phead"><h3>MVP — "기록의 시작"</h3><span class="effort">~5–6일</span><span class="chip warm">🎯 지금 여기</span></div>
+          <div class="phead"><h3>MVP — "기록의 시작" (Supabase 전환)</h3><span class="effort">~4.5–5.5일</span><span class="chip cool">🎯 MVP</span></div>
           <p class="quote"><b>MVP 정의(확정)</b> — 외장하드 연결로 웹에서 데이터를 업로드해서 기록하고,
           상대방도 접속 가능하게 하여 <b>양쪽 모두 업로드</b>할 수 있도록 한다.</p>
+          <p class="pgoal">Phase 0 산출물 재사용(api.js 시임 · 업로드 로직 · 하드 폴더/record.json 포맷)으로 원 5–6일에서 소폭 단축</p>
           <div class="tasks">
             <div class="task"><span class="tn">1-1</span>Supabase 셋업 — 스키마·RLS·private 버킷·공유 계정<span class="te">~1일</span></div>
-            <div class="task"><span class="tn">1-2</span>StorageAdapter + 데이터 레이어 교체 (메모리 → 어댑터 CRUD)<span class="te">~1.5–2일</span></div>
-            <div class="task"><span class="tn">1-3</span>업로드 파이프라인 — 압축(2000px/400px) + EXIF + 해시 + owner 토글 + 중복 감지<span class="te">~1일</span></div>
-            <div class="task"><span class="tn">1-4</span>보관함(외장하드) 연결 — 스캔/매칭·새 사진 복사·흐릿 삭제 큐·기록 백업 JSON<span class="te">~1.5일</span></div>
+            <div class="task"><span class="tn">1-2</span>api.js 구현 교체 — LocalServerAdapter → SupabaseAdapter (레이어 교체는 Phase 0 완료)<span class="te">~1일</span></div>
+            <div class="task"><span class="tn">1-3</span>업로드 파이프라인 이전 — 압축을 클라이언트로(서버리스 전환) + Storage 업로드. EXIF·해시·중복 로직 재사용<span class="te">~1일</span></div>
+            <div class="task"><span class="tn">1-4</span>보관함(외장하드) 연결 — FS API 스캔/매칭·복사·흐릿 삭제 큐. 폴더·record.json 포맷은 Phase 0 확정<span class="te">~1–1.5일</span></div>
             <div class="task"><span class="tn">1-5</span>로그인 화면 + Vercel 배포 연결<span class="te">~0.5일</span></div>
+            <div class="task"><span class="tn">1-6</span>Phase 0 데이터 마이그레이션 — record.json→테이블 + 압축본→Storage (일회성 스크립트)<span class="te">~0.5일</span></div>
           </div>
           <div class="dod"><b>완료 기준 (DoD)</b>
             <ul>
@@ -338,7 +390,7 @@ transfer_queue(id, photo_id, dest, tmp_url, status, expires_at)  <span class="c"
           <div class="tasks">
             <div class="task"><span class="tn">2-1</span>적응형 모바일 셸 — <b>하단 탭바</b>(홈·지도·＋·정리함) + 지도 풀스크린 + <b>바텀시트</b> 기록<span class="te">~3일</span></div>
             <div class="task"><span class="tn">2-2</span>PWA화 — manifest·서비스워커·iOS 설치 안내 (7일 저장소 퇴거 회피)<span class="te">~0.5–1일</span></div>
-            <div class="task"><span class="tn">2-3</span>모바일 업로드 — Wi-Fi 옵션·진행률·iOS HEIC/EXIF 실기기 검증<span class="te">~1일</span></div>
+            <div class="task"><span class="tn">2-3</span>모바일 업로드 — Wi-Fi 옵션 + 마무리 (진행률·iOS HEIC/EXIF 1차 검증은 Phase 0 선행)<span class="te">~0.5–1일</span></div>
           </div>
         </div>
       </div>
@@ -388,7 +440,8 @@ transfer_queue(id, photo_id, dest, tmp_url, status, expires_at)  <span class="c"
     <h3 style="margin-top:8px;">전체 일정 요약</h3>
     <div class="card">
       <div class="bars">
-        <div class="bar mvp"><span class="bname">Phase 1 · MVP</span><span class="btrack"><span class="bfill" style="width:40%"></span></span><span class="bdays">~5–6일</span></div>
+        <div class="bar mvp"><span class="bname">Phase 0 · 데모 (로컬)</span><span class="btrack"><span class="bfill" style="width:8%"></span></span><span class="bdays">~6시간</span></div>
+        <div class="bar"><span class="bname">Phase 1 · MVP (Supabase)</span><span class="btrack"><span class="bfill" style="width:37%"></span></span><span class="bdays">~4.5–5.5일</span></div>
         <div class="bar"><span class="bname">Phase 2 · 모바일</span><span class="btrack"><span class="bfill" style="width:33%"></span></span><span class="bdays">~4–5일</span></div>
         <div class="bar"><span class="bname">Phase 3 · 전송·관리</span><span class="btrack"><span class="bfill" style="width:27%"></span></span><span class="bdays">~3–4일</span></div>
         <div class="bar"><span class="bname">Phase 4 · 스토어 앱</span><span class="btrack"><span class="bfill" style="width:100%"></span></span><span class="bdays">+1.5–2주</span></div>
@@ -404,9 +457,11 @@ transfer_queue(id, photo_id, dest, tmp_url, status, expires_at)  <span class="c"
     <p class="sec-sub">정직한 한계 — 설계가 이미 수용한 것들</p>
     <table>
       <tr><th style="width:210px;">항목</th><th>내용</th><th style="width:260px;">대응</th></tr>
+      <tr><td><b>데모 로컬 서버 (Phase 0)</b></td><td>같은 네트워크 전용 — AP isolation 환경(카페·회사)에선 차단 가능, 장소 이동 시 IP 변경, HTTP라 브라우저 해시 API 불가</td><td>폰 핫스팟으로 우회 · 서버가 접속 주소 자동 출력 · 해시는 서버 계산 · 정식 해소는 Phase 1</td></tr>
       <tr><td><b>FS Access API</b></td><td>데스크톱 크롬/엣지 전용 (맥 사파리·모바일 불가)</td><td>기능 감지로 PC 크롬에서만 노출. "정리 세션 = PC" UX로 수용</td></tr>
       <tr><td><b>웹의 카메라롤 삭제 불가</b></td><td>"지워도 안전" 표시까지가 웹의 한계</td><td>Phase 4 네이티브 앱에서 해소</td></tr>
-      <tr><td><b>iOS 웹 사진 선택기</b></td><td>HEIC 변환·메타데이터 처리가 OS 버전마다 다름</td><td>Phase 2 실기기 검증. 위치 빠지면 "위치 없음" 플로우 수용</td></tr>
+      <tr><td><b>iOS 웹 사진 선택기</b></td><td>HEIC 변환·메타데이터 처리가 OS 버전마다 다름</td><td><b>06-06 실기기 검증: 아이폰 GPS 보존 ✓</b></td></tr>
+      <tr><td><b>안드로이드 사진 선택기</b></td><td>Android 13+ 선택기가 <b>위치 EXIF를 제거</b>하고 웹에 전달 (06-06 갤럭시 확인 — 원본엔 GPS 있음)</td><td>"내 파일" 경유 선택 시 보존 (픽 화면 안내 추가) · 근본 해소는 Phase 4 네이티브</td></tr>
       <tr><td><b>모바일 백그라운드 업로드</b></td><td>업로드 중 브라우저 유지 필요</td><td>진행률 UI + Wi-Fi 옵션 → Phase 4에서 개선</td></tr>
       <tr><td><b>iOS 저장소 7일 퇴거</b></td><td>사파리 미방문 시 세션 소실 (데이터는 클라우드라 무손실)</td><td>PWA 설치 권장으로 회피</td></tr>
       <tr><td><b>Supabase 무료 1GB</b></td><td>압축본 ~3,000장 (여행 15회 분량)</td><td>초과 시 Pro $25/월. 우체통 스파이크는 배치 제한/R2</td></tr>
@@ -420,7 +475,8 @@ transfer_queue(id, photo_id, dest, tmp_url, status, expires_at)  <span class="c"
     <div class="sec-kicker">6 · OPEN QUESTIONS</div>
     <h2>미결 사항 (추후 논의)</h2>
     <div class="qlist" style="margin-top:14px;">
-      <div class="q">압축 파라미터 확정 — 실사진으로 2000px/q80 화질·용량 검증</div>
+      <div class="q">모바일 홈·지도 셸 와이어프레임(2·3번) — 확정 시 런치의 "내 여정 둘러보기"를 실제 모바일 홈으로 연결 (#4 업로드 플로우는 06-06 확정·반영)</div>
+      <div class="q">압축 파라미터 확정 — 실사진으로 2000px/q80 화질·용량 검증 (Phase 0 실데이터로 1차 확인 가능)</div>
       <div class="q">유사(비동일) 사진 중복 감지 — perceptual hash 도입 여부</div>
       <div class="q">E2EE 도입 시점 — 암호화 키를 둘이 어떻게 공유할지 (합의 단어? QR?)</div>
       <div class="q">record-backup.json 포맷/주기 — 전체 스냅샷 vs 증분</div>
@@ -446,6 +502,9 @@ transfer_queue(id, photo_id, dest, tmp_url, status, expires_at)  <span class="c"
       <li><b>운영 책임</b> → 타인 사진 관리 거부 → BYO-cloud 템플릿 배포 모델 확정</li>
       <li><b>Supabase 필수?</b> → 아니다, "공수 최소 선택". 어댑터+내보내기로 락인 차단. 비개발자의 답은 Drive 어댑터</li>
       <li><b>모바일</b> → 적응형 웹+PWA 먼저, 스토어 앱은 Capacitor 래핑. 하단 탭바·바텀시트를 한 코드베이스 조건부 렌더링으로 — 지금 한꺼번에 개발 가능</li>
+      <li><b>시연 우선 재편 (06-06)</b> → 6시간 뒤 시연 + 폰 사진을 하드로 옮길 시간 부족 → Phase 0(로컬 Express 서버) 신설. 하드가 서버에 직결이라 폰 업로드가 곧 "폰→하드 수송" — 우체통·FS API 없이 데모 충족 (D12)</li>
+      <li><b>Supabase 전환 보장 장치</b> → record.json 필드 = Supabase 스키마, src/api.js 단일 시임. 전환 = 어댑터 구현 교체 + 일회성 마이그레이션. 데모는 빈 상태에서 실데이터로 시작, EXIF 없으면 '위치 없음' 플로우(가짜 좌표 폴백 제거)</li>
+      <li><b>모바일 업로드 와이어프레임 #4 확정 (06-06)</b> → 런치→고르기→읽는중→한 장씩 확인→완료. 웹 번역 2건: 카메라롤 그리드=OS 선택기 경유, 장소명=세션 부트스트랩(자동 이름→수정→근접 300m 제안, 역지오코딩 오면 자동화). owner는 런치 첫 1회 선택, D+N은 기념일 설정값(2024-06-29=D+1) 자동 계산. 모바일은 업로드→즉시 배치, 건너뛴 사진만 정리함</li>
     </ol>
   </section>
 

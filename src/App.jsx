@@ -1,7 +1,8 @@
-/* HeartPin · main app */
-import { Fragment, useState, useEffect, useCallback } from "react";
-import { HP_DATA, ordered, autoLine, INITIAL_INBOX } from "./data.js";
-import { buildTrip } from "./buildTrip.js";
+/* HeartPin · main app — 데이터는 서버(api.js = StorageAdapter 시임) 경유, 3초 폴링 동기화 */
+import { Fragment, useState, useEffect, useCallback, useRef } from "react";
+import { HP_DATA, syncData, ordered, autoLine } from "./data.js";
+import { buildTrip, buildTripFromGroups } from "./buildTrip.js";
+import * as api from "./api.js";
 import MapBoard from "./components/MapBoard.jsx";
 import Rnb from "./components/Rnb.jsx";
 import Gallery from "./components/Gallery.jsx";
@@ -10,16 +11,54 @@ import Inbox from "./components/Inbox.jsx";
 import Upload from "./components/Upload.jsx";
 import Home from "./components/Home.jsx";
 import TripPreview from "./components/TripPreview.jsx";
+import MobileUploadFlow from "./components/MobileUploadFlow.jsx";
 
 // 디자인에서 확정한 기본값 (Settings 화면이 생기면 그쪽으로 이동)
 const SKIN = "cozy";        // 지도 스킨: cozy | sepia | forest
 const SHOW_CHARS = true;    // 지도에 바라·뇽이 표시
 
+const isMobileNow = () => window.matchMedia("(max-width: 760px)").matches;
+
 export default function App() {
-  const regions = HP_DATA.regions;
+  const [data, setData] = useState(null); // {version, regions, inbox} — 서버가 정본
+  const versionRef = useRef(-1);
+  const [isMobile, setIsMobile] = useState(isMobileNow);
+  const [loadError, setLoadError] = useState(null);
+
+  const apply = useCallback((st) => {
+    if (!st || st.unchanged) return;
+    syncData(st.regions);
+    versionRef.current = st.version;
+    setData(st);
+  }, []);
+
+  // 최초 로드 + 3초 폴링 (상대가 올린 사진이 내 화면에 자동 반영)
+  useEffect(() => {
+    let alive = true;
+    const tick = async () => {
+      try {
+        const st = await api.fetchState(versionRef.current >= 0 ? versionRef.current : undefined);
+        if (alive) { apply(st); setLoadError(null); }
+      } catch (e) {
+        if (alive && versionRef.current < 0) setLoadError(e.message);
+      }
+    };
+    tick();
+    const iv = setInterval(tick, 3000);
+    return () => { alive = false; clearInterval(iv); };
+  }, [apply]);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(isMobileNow());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const regions = data ? data.regions : HP_DATA.regions;
+  const inboxItems = data ? data.inbox : [];
 
   const [region, setRegion] = useState("domestic");
-  const [screen, setScreen] = useState("home");
+  const [screen, setScreen] = useState("home"); // home: PC=홈 / 모바일=런치 플로우
   const [view, setView] = useState("overview");
   const [tripId, setTripId] = useState(null);
   const [spotIndex, setSpotIndex] = useState(0);
@@ -27,11 +66,9 @@ export default function App() {
   const [gallery, setGallery] = useState(null); // {spotIndex, photoIndex}
   const [journeyOpen, setJourneyOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
-  const [inboxItems, setInboxItems] = useState(() => INITIAL_INBOX.map((x) => ({ ...x })));
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadMode, setUploadMode] = useState("inbox");
   const [newTripDraft, setNewTripDraft] = useState(null);
-  const [, setDataV] = useState(0); // bump to re-render after HP_DATA mutations
 
   const trips = regions[region].trips;
   const trip = view === "trip" && tripId ? trips.find((x) => x.id === tripId) : null;
@@ -45,55 +82,60 @@ export default function App() {
 
   const openGallery = useCallback((si, pi) => setGallery({ spotIndex: si, photoIndex: pi }), []);
   const closeGallery = useCallback(() => setGallery(null), []);
-
   const changeRegion = useCallback((k) => { setRegion(k); setView("overview"); setTripId(null); }, []);
 
-  // --- mutable data: trips/spots can be created at runtime (bumps dataV to re-render) ---
-  const addTrip = useCallback((tr) => { HP_DATA.regions[tr.region].trips.unshift(tr); setDataV((v) => v + 1); }, []);
-  const findTrip = (id) => { let r = null; ["domestic", "intl"].forEach((k) => { const f = HP_DATA.regions[k].trips.find((x) => x.id === id); if (f) r = f; }); return r; };
-  const dayForDate = (tr, date) => {
-    if (date) {
-      const mm = date.slice(5, 7), dd = date.slice(8, 10);
-      const d = tr.days.find((x) => { const m = x.date.match(/(\d+)\.(\d+)/); return m && ("0" + m[1]).slice(-2) === mm && ("0" + m[2]).slice(-2) === dd; });
-      if (d) return d;
+  // --- 변이는 전부 서버 ops 경유 (api.js) ---
+  const placePhotos = useCallback(async (rows, opts) => {
+    // "＋ 새 여행 만들기"를 고른 행은 같은 장소 이름끼리 묶어 새 여행으로 조립
+    // r.pickedLat/Lng: 위치 없는 사진에 지도에서 찍어준 좌표
+    const fresh = rows.filter((r) => r.tripId === "__newtrip__");
+    const normal = rows.filter((r) => r.tripId !== "__newtrip__");
+    let st = null;
+    if (normal.length) {
+      st = await api.opPlacePhotos(normal.map((r) => ({
+        itemId: r.item.id, tripId: r.tripId, spotId: r.spotId,
+        newSpotName: r.newSpotName, memo: r.memo,
+        lat: r.pickedLat, lng: r.pickedLng,
+        line: r.spotId === "__new__" ? autoLine({ time: r.item.time }) : undefined
+      })));
     }
-    return tr.days[tr.days.length - 1];
-  };
-  const placePhotos = useCallback((rows) => {
-    rows.forEach((r) => {
-      const tr = findTrip(r.tripId); if (!tr) return;
-      const photo = { src: r.item.src, label: r.memo || r.item.autoLabel, ratio: "4/3", tint: r.item.tint };
-      if (r.spotId === "__new__") {
-        const nm = ((r.newSpotName || "").trim()) || "새 장소";
-        const ln = autoLine({ time: r.item.time });
-        dayForDate(tr, r.item.date).spots.push({
-          id: "sp" + Date.now() + Math.random().toString(36).slice(2, 6),
-          name: nm, time: r.item.time || "12:00", lat: r.item.lat, lng: r.item.lng,
-          mood: "우리 기록", guide: ln.guide, reaction: ln.reaction, photos: [photo]
-        });
-      } else {
-        let sp = null; tr.days.forEach((d) => { const f = d.spots.find((s) => s.id === r.spotId); if (f) sp = f; });
-        if (sp) sp.photos.push(photo);
+    if (fresh.length) {
+      const pool = fresh.map((r) => {
+        const nm = (r.newSpotName || "").trim() || "새 장소";
+        const item = r.pickedLat != null ? { ...r.item, lat: r.pickedLat, lng: r.pickedLng } : r.item;
+        return { item, spot: { key: nm, name: nm }, label: r.memo };
+      });
+      const tr = buildTripFromGroups(pool);
+      if (tr) {
+        const title = (opts && opts.newTripTitle || "").trim();
+        if (title) tr.title = title;
+        st = await api.opAddTrip(tr);
       }
-    });
-    setDataV((v) => v + 1);
-  }, []);
+    }
+    if (st) apply(st);
+  }, [apply]);
+
+  const editTrip = useCallback(async (tripId, text) => {
+    apply(await api.opEditTrip(tripId, text));
+  }, [apply]);
+
+  const editSpot = useCallback(async (spotId, field, text) => {
+    apply(await api.opEditSpot(spotId, field, text));
+  }, [apply]);
+
+  const inboxKeep = useCallback(async (id) => { apply(await api.opInboxKeep(id)); }, [apply]);
+  const inboxDiscard = useCallback(async (ids) => { apply(await api.opInboxDiscard(ids)); }, [apply]);
+  const inboxPurge = useCallback(async (ids) => { apply(await api.opInboxPurge(ids)); }, [apply]);
+
   const buildDraft = useCallback((items) => { const tr = buildTrip(items); if (tr) setNewTripDraft(tr); return !!tr; }, []);
-  const editSpot = useCallback((spotId, field, text) => {
-    ["domestic", "intl"].forEach((rk) => HP_DATA.regions[rk].trips.forEach((tr) => tr.days.forEach((d) => {
-      const s = d.spots.find((x) => x.id === spotId); if (s) s[field] = text;
-    })));
-    setDataV((v) => v + 1);
-  }, []);
-  const saveNewTrip = useCallback((tr) => {
-    addTrip(tr);
-    setInboxItems((prev) => prev.filter((i) => (tr._sourceIds || []).indexOf(i.id) < 0));
+  const saveNewTrip = useCallback(async (tr) => {
+    apply(await api.opAddTrip(tr));
     setNewTripDraft(null);
     setRegion(tr.region); setTripId(tr.id); setSpotIndex(0); setView("trip");
     setScreen("main"); setInboxOpen(false);
-  }, [addTrip]);
+  }, [apply]);
 
-  // keyboard nav
+  // keyboard nav (PC)
   useEffect(() => {
     function onKey(e) {
       if (journeyOpen) return; // Journey player owns the keyboard while open
@@ -114,6 +156,15 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [view, gallery, spots, next, prev, back, journeyOpen]);
 
+  if (loadError) {
+    return (
+      <div className="hp-app hp-boot">
+        <p>서버에 연결할 수 없어요 😢<br /><small>{loadError}</small><br /><small>Mac에서 <code>npm run demo</code>가 실행 중인지 확인해 주세요.</small></p>
+      </div>
+    );
+  }
+  if (!data) return <div className="hp-app hp-boot"><p>기록 불러오는 중…</p></div>;
+
   const gallerySpot = gallery && spots ? spots[gallery.spotIndex] : null;
 
   const home = (
@@ -129,6 +180,18 @@ export default function App() {
     />
   );
 
+  // 모바일 진입점 = 런치→사진 올리기 플로우 (디자인 핸드오프 #4 · 홈은 와이어프레임 미정)
+  const mobileFlow = (
+    <MobileUploadFlow
+      regions={regions}
+      onApplyState={apply}
+      onOpenMap={() => { back(); setScreen("main"); }}
+      hasTrips={Object.values(regions).some((r) => r.trips.length > 0)}
+      inboxCount={inboxItems.length}
+      onOpenInbox={() => setInboxOpen(true)}
+    />
+  );
+
   const mainEl = (
     <Fragment>
       <header className="hp-topbar">
@@ -136,11 +199,11 @@ export default function App() {
           <span className="hp-logo" />
           <div>
             <h1>HeartPin</h1>
-            <span className="hp-brand-sub">홈으로</span>
+            <span className="hp-brand-sub">{isMobile ? "올리기로" : "홈으로"}</span>
           </div>
         </button>
         <div className="hp-topbar-right">
-          <button className="hp-top-btn" type="button" onClick={() => { setUploadMode("inbox"); setUploadOpen(true); }}>＋ 사진 불러오기</button>
+          {!isMobile && <button className="hp-top-btn" type="button" onClick={() => { setUploadMode("inbox"); setUploadOpen(true); }}>＋ 사진 불러오기</button>}
           <button className="hp-top-btn ghost" type="button" onClick={() => setInboxOpen(true)}>{`정리함 ${inboxItems.length}`}</button>
         </div>
       </header>
@@ -168,7 +231,7 @@ export default function App() {
           onSelectSpot={goSpot} onPrev={prev} onNext={next} onOpenGallery={openGallery}
           onToggleCollapse={() => setCollapsed((c) => !c)}
           onPlayJourney={() => setJourneyOpen(true)}
-          onEditSpot={editSpot}
+          onEditSpot={editSpot} onEditTrip={editTrip}
         />
       </div>
     </Fragment>
@@ -176,15 +239,16 @@ export default function App() {
 
   return (
     <div className="hp-app">
-      {screen === "home" ? home : mainEl}
+      {screen === "home" ? (isMobile ? mobileFlow : home) : mainEl}
 
       {journeyOpen && trip && <Journey trip={trip} onClose={() => setJourneyOpen(false)} />}
 
       {inboxOpen && (
         <Inbox
-          items={inboxItems} setItems={setInboxItems}
+          items={inboxItems}
           onClose={() => setInboxOpen(false)}
           onPlace={placePhotos} onNewTrip={buildDraft}
+          onKeep={inboxKeep} onDiscard={inboxDiscard} onPurge={inboxPurge}
         />
       )}
 
@@ -192,10 +256,14 @@ export default function App() {
         <Upload
           title={uploadMode === "newtrip" ? "새 여행 만들기" : "사진 불러오기"}
           onClose={() => setUploadOpen(false)}
-          onAdd={(newItems) => {
+          onDone={(result) => {
             setUploadOpen(false);
-            if (uploadMode === "newtrip") { const tr = buildTrip(newItems); if (tr) { setNewTripDraft(tr); return; } }
-            setInboxItems((p) => newItems.concat(p)); setInboxOpen(true);
+            apply(result.state);
+            if (uploadMode === "newtrip" && result.added.length) {
+              const tr = buildTrip(result.added);
+              if (tr) { setNewTripDraft(tr); return; }
+            }
+            setInboxOpen(true);
           }}
         />
       )}

@@ -1,7 +1,38 @@
 /* HeartPin · RNB record panel (overview list + card-news deck) */
+import { useState, useEffect } from "react";
 import { CHAR } from "../chars.js";
 import { ordered } from "../data.js";
 import { Photo, Speech, Chip } from "./ui.jsx";
+
+// 여행 이름 인라인 편집 (✎ → 입력 → Enter/blur 저장)
+function TripTitle({ trip, onEditTrip }) {
+  const [ed, setEd] = useState(false);
+  const [val, setVal] = useState(trip.title);
+  useEffect(() => { setVal(trip.title); }, [trip.title]);
+  const commit = () => {
+    setEd(false);
+    const t = val.trim();
+    if (t && t !== trip.title && onEditTrip) onEditTrip(trip.id, t); else setVal(trip.title);
+  };
+  if (ed) {
+    return (
+      <input
+        className="hp-trip-rename" value={val} autoFocus
+        onChange={(e) => setVal(e.target.value)} onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+          else if (e.key === "Escape") { setVal(trip.title); setEd(false); }
+        }}
+      />
+    );
+  }
+  return (
+    <b className="hp-crumb-title">
+      {trip.title.replace(/^\d+박 \d+일 /, "")}
+      <button className="hp-edit-pen" type="button" onClick={() => setEd(true)} aria-label="여행 이름 수정">✎</button>
+    </b>
+  );
+}
 
 function CollapsedRail({ onExpand }) {
   return (
@@ -54,14 +85,14 @@ function Overview({ regions, region, onRegion, trips, onSelectTrip }) {
   );
 }
 
-function Deck({ trip, spots, spotIndex, onBack, onSelectSpot, onPrev, onNext, onOpenGallery, onPlayJourney, onEditSpot }) {
+function Deck({ trip, spots, spotIndex, onBack, onSelectSpot, onPrev, onNext, onOpenGallery, onPlayJourney, onEditSpot, onEditTrip }) {
   const s = spots[spotIndex];
   return (
     <div className="hp-rnb-body">
       <div className="hp-crumb">
         <button type="button" className="hp-crumb-back" onClick={onBack}>‹ 전체 여정</button>
         <span className="hp-crumb-sep">/</span>
-        <b>{trip.title.replace(/^\d+박 \d+일 /, "")}</b>
+        <TripTitle trip={trip} onEditTrip={onEditTrip} />
         <span className="hp-crumb-sep">·</span>
         <span className="hp-crumb-day">{`${s.dayLabel} ${s.dayDate}`}</span>
       </div>
