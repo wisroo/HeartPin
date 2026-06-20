@@ -59,6 +59,23 @@ async function save() {
   await fsp.rename(tmp, RECORD); // atomic
 }
 const publicState = () => ({ version: state.version, regions: state.regions, inbox: state.inbox });
+const stateCounts = () => {
+  const trips = allTrips();
+  const spots = trips.reduce((sum, trip) => sum + trip.days.reduce((n, day) => n + day.spots.length, 0), 0);
+  const moments = trips.reduce((sum, trip) => (
+    sum + trip.days.reduce((daySum, day) => (
+      daySum + day.spots.reduce((spotSum, spot) => spotSum + (spot.photos?.length || 0), 0)
+    ), 0)
+  ), 0);
+  return {
+    trips: trips.length,
+    spots,
+    moments,
+    inbox: state.inbox.length,
+    photos: Object.keys(state.photos_index || {}).length,
+    discarded: state.discarded.length
+  };
+};
 
 // ── helpers ──────────────────────────────────────────────────────────
 const TINTS = ["cool", "warm", "sage", "gold"];
@@ -112,6 +129,23 @@ app.get("/api/state", (req, res) => {
     return res.json({ version: state.version, unchanged: true });
   }
   res.json(publicState());
+});
+
+// 데모 시작 전 빠른 점검용: 서버·보관소·record.json 상태를 한 번에 확인
+app.get("/api/status", (req, res) => {
+  res.json({
+    ok: true,
+    version: state.version,
+    saved_at: state.saved_at,
+    vault: {
+      root: VAULT_ROOT,
+      path: VAULT,
+      external: Boolean(process.env.HEARTPIN_VAULT),
+      record: RECORD,
+      record_exists: fs.existsSync(RECORD)
+    },
+    counts: stateCounts()
+  });
 });
 
 // ── 업로드 공용 파이프라인 — /api/photos(앱) · /api/share(공유 시트) 양쪽에서 사용 ──
@@ -332,7 +366,9 @@ app.listen(PORT, "0.0.0.0", async () => {
   console.log("");
   console.log("  ♥ HeartPin Phase 0 서버");
   console.log(`  보관소: ${VAULT}${process.env.HEARTPIN_VAULT ? " (외장하드)" : "  ⚠️ 폴백 폴더 — 외장하드는 HEARTPIN_VAULT=/Volumes/<이름> 으로"}`);
-  console.log(`  기록:   ${state.version}v · 여행 ${allTrips().length} · 정리함 ${state.inbox.length}`);
+  const counts = stateCounts();
+  console.log(`  기록:   ${state.version}v · 여행 ${counts.trips} · 장소 ${counts.spots} · 사진 ${counts.photos} · 정리함 ${counts.inbox}`);
+  console.log(`  점검:   http://localhost:${PORT}/api/status`);
   console.log("  ── 폰에서 접속 ──");
   ips.forEach((ip) => console.log(`  http://${ip}:${PORT}`));
   console.log(`  http://${local}:${PORT}  (아이폰은 이 주소도 잘 열려요 — Bonjour)`);

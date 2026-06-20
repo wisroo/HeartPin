@@ -15,6 +15,16 @@ npm run preview  # 빌드 미리보기
 
 Vercel 배포: 저장소 연결만 하면 Vite 프리셋으로 자동 인식됩니다.
 
+## Phase 1 Supabase 준비
+
+Phase 1 전환용 스키마와 환경변수 계약은 레포에 포함되어 있습니다.
+
+- `supabase/schema.sql`: 테이블, RLS, private `photos` 버킷 정책
+- `.env.example`: `VITE_HEARTPIN_API_MODE`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+- `docs/PHASE1_SUPABASE.md`: Supabase 프로젝트 셋업 순서
+
+현재 기본 실행 모드는 `local`입니다. Supabase SDK 연결이 들어간 뒤 `VITE_HEARTPIN_API_MODE=supabase`로 전환합니다.
+
 ## 구조
 
 ```

@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "server": "node server/index.js",
-    "demo": "vite build && node server/index.js"
+    "demo": "vite build && node server/index.js",
+    "export:record": "node scripts/export-record.mjs"
   },
   "dependencies": {
     "adm-zip": "^0.5.17",

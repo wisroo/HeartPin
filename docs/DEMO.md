@@ -5,6 +5,7 @@
 - [ ] 외장 SSD 연결 확인 (`/Volumes/Extreme SSD/여가/상우♥︎`)
 - [ ] 터미널에서 **`./scripts/demo.sh`** 실행 → 접속 주소 + **QR코드** 출력 (서버가 죽어도 자동 재시작)
 - [ ] Mac 브라우저에서 `http://localhost:3300` 열어 지도 확인
+- [ ] Mac 브라우저에서 `http://localhost:3300/api/status` 열어 `ok: true`, `vault.external: true`, `record_exists: true` 또는 첫 업로드 전 상태 확인
 - [ ] 폰 2대를 **Mac과 같은 와이파이**에 연결 → 카메라로 QR 스캔해 접속 확인
 - [ ] 폰에서 접속 시 Mac에 방화벽 팝업이 뜨면 **"허용"**
 - [ ] (플랜 B) 카페·회사망 등에서 폰→Mac이 안 붙으면: **폰 핫스팟**을 켜고 Mac+나머지 폰을 거기 연결 → 스크립트 재시작 → 새 QR 사용
@@ -37,6 +38,7 @@
 |---|---|
 | 폰에서 접속 안 됨 | ① 주소에 `http://` 명시 ② 같은 와이파이인지 ③ 폰 VPN 끄기 ④ 핫스팟 플랜 B |
 | 서버 죽음 | demo.sh가 2초 내 자동 재시작 — 화면만 새로고침 |
+| 보관소가 맞는지 헷갈림 | `http://localhost:3300/api/status`에서 `vault.path`와 `vault.external` 확인 |
 | IP가 바뀜 (장소 이동) | demo.sh 재시작 → 새 QR 스캔 |
 | 화면이 옛날 버전 | 폰 브라우저 새로고침 (당겨서 새로고침) |
 | 지도 타일 안 보임 | 인터넷 필요 (핫스팟이면 LTE로 자동 해결) |
