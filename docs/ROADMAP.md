@@ -43,7 +43,7 @@ Trip → Day → Spot → Moment 단위로 여정을 자동 정리하고, 지도
 | **D7** | 인증 = **공유 계정 1개** + 캐릭터 owner 토글(바라/뇽이) | 2인 전용 — 회원가입/초대/권한 로직 불필요, 동시 쓰기 충돌 최소화 | 계정 2개+권한 모델(과함) |
 | **D8** | 보관함 연결 = **File System Access API** | 웹앱이 로컬 파일을 읽고·쓰고·지울 유일한 표준 방법. 핸들 영속화로 재연결 1클릭 | Electron/네이티브(배포 부담) |
 | **D9** | 사람·기기 간 전송 = **클라우드 경유 (우체통: 임시 중계 후 삭제)** | 폰↔PC가 시간차를 두고 만나도 됨 · "백업 X, 전송 O" 목표와 일치 | P2P(WebRTC): 동시 접속 필요, 복잡도 대비 가치 낮음 |
-| **D10** | 모바일 = **적응형 웹+PWA 먼저 → Capacitor 스토어 앱** | 같은 코드 재사용(~90%), 웹에서 기능 검증 후 래핑 — 버려지는 작업 없음 | React Native 재작성(+1~2달) |
+| **D10** | 모바일 = **Mobile shell + Capacitor dev app spike 우선** | Android 브라우저 사진 선택기가 위치 EXIF를 제거하는 문제가 확인됨. 업로드 신뢰성은 native photo permission 경로로 먼저 검증하고, UI는 기존 Mobile shell을 재사용 | React Native 재작성(+1~2달) / 웹 input 우회만으로 해결 |
 | **D11** | 커스텀 서버 코드는 **Vercel Functions로 최소화** (JS·Python 혼용 가능) | Supabase가 API 대체. LLM/Mapbox 키 은닉, HEIC 처리 등 필요한 함수만 | FastAPI 상시 서버(불필요) |
 | **D12** | **Phase 0 데모 = 로컬 Express 서버** (Mac, 같은 네트워크 — 임시) | 6시간 시연: 폰 2대 업로드→지도 기록→하드 저장. 하드가 서버 머신에 직결 → Node fs 직접 쓰기로 **FS API·우체통 없이 "폰→하드"가 한 홉** · record.json 필드를 Supabase 스키마와 동일하게 유지해 전환 보장 | Supabase 압축 일정(6시간 내 불가) / FS Access API(폰 미지원) |
 
@@ -165,7 +165,24 @@ transfer_queue(id, photo_id, dest, tmp_url, status, expires_at)  -- 우체통
 
 **Phase 0에서 의도적으로 뺀 것**: Supabase · 로그인(같은 네트워크 한정이라 무인증) · FS Access API · 우체통 · 역지오코딩(장소명은 세션 부트스트랩으로 대체) · **모바일 홈·지도 셸**(와이어프레임 2·3번 미정 — 런치 화면이 임시 진입점)
 
-### Phase 1 — MVP "기록의 시작" · Supabase 전환 🎯 (~4.5–5.5일)
+### Phase 1A — 모바일 네이티브 업로드 Spike 📱 (~1–2일)
+
+> **목표**: Play Store/App Store 배포 전, Capacitor dev build로 Android/iOS 실기기에 설치해 native photo picker가 EXIF/GPS를 보존하는지 확인한다.
+
+| 작업 | 내용 | 공수 |
+|---|---|---|
+| 1A-1. Capacitor 스캐폴딩 | 기존 Vite/React 앱을 Android/iOS dev app으로 감싸기. MobileApp을 앱 엔트리로 유지 | ~0.5일 |
+| 1A-2. Native media picker adapter | `webMediaPicker`와 `capacitorMediaPicker` 경계 생성. Android/iOS에서 사진 선택, metadata/EXIF, 원본 URI 읽기 검증 | ~0.5–1일 |
+| 1A-3. 실기기 검증 | 갤럭시/iPhone에 개발 빌드 설치. 같은 사진을 web input/native picker로 비교해 lat/lng 보존 여부 기록 | ~0.5일 |
+
+**완료 기준(DoD)**
+- [ ] Android debug APK 또는 `npx cap run android`로 갤럭시 설치
+- [ ] iOS Xcode dev install로 iPhone 설치
+- [ ] native picker에서 GPS 보존 여부 확인
+- [ ] 기존 web input 경로와 결과 비교 기록
+- [ ] Supabase 업로드 구현 전에 사용할 mobile media adapter 계약 확정
+
+### Phase 1B — MVP "기록의 시작" · Supabase 전환 🎯 (~4.5–5.5일)
 
 > **MVP 정의(확정)**: 외장하드 연결로 웹에서 데이터를 업로드해서 기록하고,
 > 상대방도 접속 가능하게 하여 양쪽 모두 데이터를 업로드할 수 있도록 한다.
@@ -189,13 +206,13 @@ transfer_queue(id, photo_id, dest, tmp_url, status, expires_at)  -- 우체통
 
 **Phase 1에서 의도적으로 뺀 것**: 우체통(원본 릴레이), 모바일 최적화(기본 반응형만), 보관 현황 대시보드, LLM/역지오코딩
 
-### Phase 2 — 모바일 경험 (~4–5일)
+### Phase 2 — 모바일 경험 (~3–4일)
 
 | 작업 | 내용 | 공수 |
 |---|---|---|
 | 2-1. 적응형 모바일 셸 | **하단 탭바**(홈·지도·＋업로드·정리함) + Main을 **지도 풀스크린+바텀시트**로. 셸만 두 벌, 컴포넌트는 공유 | ~3일 |
-| 2-2. PWA화 | manifest·아이콘·서비스워커(앱 셸 캐시)·iOS 설치 안내 — iOS 7일 저장소 퇴거 회피 | ~0.5–1일 |
-| 2-3. 모바일 업로드 다듬기 | Wi-Fi 전용 옵션 + 마무리 (진행률 UI·iOS HEIC/EXIF 1차 실기기 검증은 **Phase 0에서 선행됨**) | ~0.5–1일 |
+| 2-2. PWA화 | manifest·아이콘·서비스워커(앱 셸 캐시)·iOS 설치 안내 — iOS 7일 저장소 퇴거 회피. 업로드 신뢰성은 Capacitor 경로를 우선한다 | ~0.5–1일 |
+| 2-3. 모바일 업로드 다듬기 | Wi-Fi 옵션·진행률·위치 없음 처리. Android GPS 보존은 web input이 아니라 Capacitor native picker 기준으로 검증 | ~0.5일 |
 
 모바일 역할: 열람 + 업로드 + 기록 편집 (보관함 연결은 PC 전용 유지 — FS API 제약)
 
@@ -232,8 +249,9 @@ transfer_queue(id, photo_id, dest, tmp_url, status, expires_at)  -- 우체통
 
 ```
 Phase 0  데모 (로컬 서버 시연)      █░░░░░░░░░  ~6시간   ← 지금 여기 (2026-06-06)
-Phase 1  MVP (Supabase 전환)        ████████░░  ~4.5–5.5일
-Phase 2  모바일 웹/PWA              ████████░░  ~4–5일
+Phase 1A Capacitor 업로드 Spike     ██░░░░░░░░  ~1–2일
+Phase 1B MVP (Supabase 전환)        ████████░░  ~4.5–5.5일
+Phase 2  모바일 웹/PWA 보강          ██████░░░░  ~3–4일
 Phase 3  전송·공동관리              ██████░░░░  ~3–4일
 Phase 4  스토어 앱                  ██████████  +1.5–2주
 Phase 5  개방·확장                  수시 (독립 항목별 선택)
@@ -249,7 +267,7 @@ Phase 5  개방·확장                  수시 (독립 항목별 선택)
 | FS Access API | **데스크톱 크롬/엣지 전용** (맥 사파리·모바일 전부 불가) | 기능 감지로 PC 크롬에서만 노출. "정리 세션 = PC" UX로 수용 |
 | 웹은 폰 카메라롤 삭제 불가 | "지워도 안전" 표시까지가 웹의 한계 | Phase 4 네이티브 앱에서 해소 |
 | iOS 웹 사진 선택기 | HEIC→JPEG 변환·메타데이터 처리가 OS 버전마다 다름 | **06-06 실기기 검증: 아이폰은 GPS 보존 확인 ✓** |
-| 안드로이드 사진 선택기 | **Android 13+ 시스템 사진 선택기가 위치 EXIF를 제거**하고 웹에 전달 (06-06 갤럭시 실기기에서 확인 — 원본엔 GPS 있음) | 선택창에서 갤러리 대신 **"내 파일" 경유 선택** 시 보존 (픽 화면에 안내 추가) · 근본 해소는 Phase 4 네이티브 카메라롤 |
+| 안드로이드 사진 선택기 | **Android 13+ 시스템 사진 선택기가 위치 EXIF를 제거**하고 웹에 전달 (06-06 갤럭시 실기기에서 확인 — 원본엔 GPS 있음). 사진 권한을 받은 앱의 native picker 경로에서는 위치 전달 가능성이 높음 | Supabase 전환 전 **Capacitor dev app spike**로 native picker/metadata 보존 여부를 우선 검증. 웹 input은 fallback으로 유지 |
 | 모바일 백그라운드 업로드 불가 | 업로드 중 브라우저 유지 필요 | 진행률 UI + Wi-Fi 옵션. Phase 4에서 개선 |
 | iOS 저장소 7일 퇴거 | 사파리 미방문 시 세션 소실(데이터는 클라우드라 무손실) | PWA 설치 권장으로 회피 |
 | Supabase 무료 1GB | 압축본 ~3,000장 (여행 15회 분량) | 초과 시 Pro($25/월, 100GB). 우체통 스파이크는 배치 제한/R2 |

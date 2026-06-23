@@ -134,13 +134,14 @@ MobileApp은 모바일 브라우저, PWA, iOS/Android 앱의 기준 UI다.
 
 ## iOS/Android 전략
 
-초기 앱 전략은 Capacitor 기반을 우선한다.
+초기 앱 전략은 Capacitor 기반을 우선한다. Android 브라우저 사진 선택기가 위치 EXIF를 제거하는 문제가 확인됐으므로, 모바일 업로드 신뢰성 확보를 위해 Capacitor dev app spike를 Supabase 업로드 구현 전에 진행한다.
 
 이유:
 
 - React/Vite 코드와 도메인 로직을 재사용할 수 있다.
 - 모바일 웹 UI를 PWA와 앱에서 함께 발전시킬 수 있다.
 - 나중에 카메라롤, 파일 권한, 푸시 알림 등 네이티브 기능을 얇게 붙일 수 있다.
+- Play Store/App Store 배포 전에도 Android debug APK와 iOS Xcode 실기기 설치로 업로드 경로를 검증할 수 있다.
 
 Capacitor 앱은 MobileApp을 엔트리로 사용한다.
 
@@ -172,6 +173,24 @@ services/media
 ```
 
 기능 코드는 "사진을 선택한다", "원본을 저장한다", "권한을 요청한다" 같은 의도를 호출하고, 실제 플랫폼별 구현은 adapter가 맡는다.
+
+### Media Picker Adapter
+
+모바일 업로드는 다음 경계를 목표로 한다.
+
+```text
+src/platform/media/
+  webMediaPicker.js
+    - browser file input
+    - Android에서는 위치 EXIF가 null일 수 있음
+
+  capacitorMediaPicker.js
+    - Capacitor Camera/Photos 권한
+    - EXIF/GPS metadata 포함 여부 검증
+    - URI에서 원본 바이트를 읽어 hash/upload 파이프라인에 전달
+```
+
+`MobileUploadFlow`는 직접 `<input type="file">`에 의존하지 않고 media picker adapter를 호출하는 방향으로 이동한다. Web/PWA에서는 기존 input 경로를 유지하고, Capacitor 앱에서는 native picker 경로를 사용한다.
 
 ## 언제 레포를 나눌 것인가
 
