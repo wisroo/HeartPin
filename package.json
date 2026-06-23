@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "server": "node server/index.js",
     "demo": "vite build && node server/index.js",
-    "export:record": "node scripts/export-record.mjs"
+    "export:record": "node scripts/export-record.mjs",
+    "test": "vitest"
   },
   "dependencies": {
     "adm-zip": "^0.5.17",
@@ -24,7 +25,11 @@
     "sharp": "^0.34.5"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@vitejs/plugin-react": "^4.3.4",
-    "vite": "^6.0.0"
+    "jsdom": "^29.1.1",
+    "vite": "^6.0.0",
+    "vitest": "^4.1.9"
   }
 }
