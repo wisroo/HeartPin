@@ -1,0 +1,8 @@
+{
+  "appId": "com.heartpin.app",
+  "appName": "HeartPin",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}

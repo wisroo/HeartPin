@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">HeartPin</string>
+    <string name="title_activity_main">HeartPin</string>
+    <string name="package_name">com.heartpin.app</string>
+    <string name="custom_url_scheme">com.heartpin.app</string>
+</resources>
