@@ -4,6 +4,8 @@
 >
 > **문서 목적**: 백엔드 개발 범주·단계, 모바일 개선 단계, 저장/전송(클라우드·외장하드) 논의와 결정을 기록한다.
 > MVP(1단계) 범위를 확정하고, 나머지는 추후 개발이 용이하도록 로드맵과 논의 근거를 남긴다.
+>
+> 정식 출시 운영, 개인정보, BYO cloud, E2EE 전략은 [정식 운영 로드맵](./OPERATIONS-ROADMAP.md)에서 별도로 관리한다.
 
 ---
 
@@ -133,7 +135,7 @@ transfer_queue(id, photo_id, dest, tmp_url, status, expires_at)  -- 우체통
               └─ DriveAdapter      ← Phase 5 (비개발자 확산 시)
 ```
 
-연결 정보는 코드에 박지 않고 환경변수(`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`)로 — BYO 배포의 전제.
+연결 정보는 코드에 박지 않고 환경변수(`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`)로 — BYO 배포의 전제.
 
 ---
 

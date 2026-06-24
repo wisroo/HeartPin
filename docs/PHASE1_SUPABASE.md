@@ -81,20 +81,20 @@ photos/thumb/<content_hash>.webp
 ```bash
 VITE_HEARTPIN_API_MODE=supabase
 VITE_SUPABASE_URL=https://...
-VITE_SUPABASE_ANON_KEY=...
+VITE_SUPABASE_PUBLISHABLE_KEY=...
 ```
 
 현재 앱은 `local` 모드가 기본값이다. Supabase SDK 연결이 들어간 뒤 `VITE_HEARTPIN_API_MODE=supabase`로 전환한다.
 
-### 2-1. URL과 anon key 찾기
+### 2-1. URL과 Publishable API Key 찾기
 
 1. Supabase 프로젝트에서 **Project Settings**를 연다.
 2. **API** 메뉴로 간다.
 3. 다음 값을 복사한다.
    - Project URL → `VITE_SUPABASE_URL`
-   - anon public key → `VITE_SUPABASE_ANON_KEY`
+   - Publishable API Key → `VITE_SUPABASE_PUBLISHABLE_KEY`
 
-`service_role` key는 클라이언트 `.env.local`에 넣지 않는다. 브라우저에 노출되면 안 된다.
+`Secret API Key`와 `service_role` key는 클라이언트 `.env.local`에 넣지 않는다. 브라우저에 노출되면 안 된다.
 
 ### 2-2. `.env.local` 만들기
 
@@ -103,7 +103,7 @@ VITE_SUPABASE_ANON_KEY=...
 ```bash
 VITE_HEARTPIN_API_MODE=supabase
 VITE_SUPABASE_URL=https://your-project-ref.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-public-key
+VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 ```
 
 아직 SupabaseAdapter 구현 전이면 `VITE_HEARTPIN_API_MODE=local`로 둔다.
@@ -111,7 +111,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-public-key
 ```bash
 VITE_HEARTPIN_API_MODE=local
 VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
+VITE_SUPABASE_PUBLISHABLE_KEY=
 ```
 
 설정 후 앱을 재시작한다.
