@@ -17,7 +17,25 @@ Android 모바일 브라우저 사진 선택 경로에서 GPS EXIF가 `null`로 
 | Mobile upload flow adapter 연결 | 완료 | `src/mobile/MobileUploadFlow.jsx` |
 | Android native project | 완료 | `android/` |
 | Android sync | 완료 | `npm run cap:sync` 성공 |
+| Android debug APK build | 대기 | 현재 Mac에 Java Runtime/JDK가 없어 `./gradlew assembleDebug` 실패 |
 | iOS native project | 대기 | 현재 Mac에 CocoaPods와 full Xcode가 없어 `npx cap add ios` 실패 |
+
+## Android 환경 준비 필요 항목
+
+현재 확인된 실패:
+
+```text
+./gradlew assembleDebug
+The operation couldn’t be completed. Unable to locate a Java Runtime.
+```
+
+Galaxy 실기기 검증 전 준비:
+
+1. Android Studio 설치
+2. Android Studio에서 JDK/Android SDK 설치 확인
+3. `java -version` 확인
+4. `cd android && ./gradlew assembleDebug`
+5. Android Studio 또는 `npx cap run android`로 Galaxy 설치
 
 ## iOS 환경 준비 필요 항목
 
