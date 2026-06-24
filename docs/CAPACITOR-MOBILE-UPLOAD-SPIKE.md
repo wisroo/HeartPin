@@ -17,27 +17,24 @@ Android 모바일 브라우저 사진 선택 경로에서 GPS EXIF가 `null`로 
 | Mobile upload flow adapter 연결 | 완료 | `src/mobile/MobileUploadFlow.jsx` |
 | Android native project | 완료 | `android/` |
 | Android sync | 완료 | `npm run cap:sync` 성공 |
-| Android debug APK build | 대기 | Java/Gradle 단계는 통과. Android SDK 위치가 없어 `./gradlew assembleDebug` 실패 |
+| Android debug APK build | 완료 | `cd android && ./gradlew assembleDebug` 성공. APK: `android/app/build/outputs/apk/debug/app-debug.apk` |
 | iOS native project | 완료 | Xcode/CocoaPods 설정 후 `npx cap add ios`, `npm run cap:sync` 성공 |
 
 ## Android 환경 준비 필요 항목
 
-현재 확인된 실패:
+현재 확인:
 
 ```text
 ./gradlew assembleDebug
-SDK location not found. Define a valid SDK location with an ANDROID_HOME environment variable or by setting the sdk.dir path in your project's local properties file at '/Users/a11791/Cursor/HeartPin/android/local.properties'.
+BUILD SUCCESSFUL
 ```
 
 Galaxy 실기기 검증 전 준비:
 
-1. Android Studio 설치
-2. Android Studio에서 JDK/Android SDK 설치 확인
-3. Android SDK 경로 확인. 기본값은 `/Users/a11791/Library/Android/sdk`
-4. `android/local.properties`에 `sdk.dir=/Users/a11791/Library/Android/sdk` 설정 또는 `ANDROID_HOME` 환경변수 설정
-5. `java -version` 확인
-6. `cd android && ./gradlew assembleDebug`
-7. Android Studio 또는 `npx cap run android`로 Galaxy 설치
+1. `android/local.properties`에 `sdk.dir=/Users/a11791/Library/Android/sdk` 설정
+2. `cd android && ./gradlew assembleDebug`
+3. 생성된 `android/app/build/outputs/apk/debug/app-debug.apk`를 Galaxy에 설치
+4. 또는 Android Studio 설치 후 `npm run cap:android`로 실기기 실행
 
 ## iOS 환경 준비 필요 항목
 

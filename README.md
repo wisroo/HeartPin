@@ -49,6 +49,13 @@ Android SDK를 못 찾는 경우 Android Studio에서 SDK를 설치한 뒤 `andr
 sdk.dir=/Users/a11791/Library/Android/sdk
 ```
 
+Android Studio 전체 설치가 막히면 command line tools만으로도 SDK를 구성할 수 있습니다.
+
+```bash
+brew install --cask android-commandlinetools
+yes | sdkmanager --sdk_root=/Users/a11791/Library/Android/sdk "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+```
+
 Galaxy 실기기 설치는 Android Studio에서 `android/` 프로젝트를 열거나, 환경 준비 후 `npm run cap:android`로 진행합니다.
 
 ### iOS
