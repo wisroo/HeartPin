@@ -17,8 +17,8 @@ Android 모바일 브라우저 사진 선택 경로에서 GPS EXIF가 `null`로 
 | Mobile upload flow adapter 연결 | 완료 | `src/mobile/MobileUploadFlow.jsx` |
 | Android native project | 완료 | `android/` |
 | Android sync | 완료 | `npm run cap:sync` 성공 |
-| Android debug APK build | 대기 | 현재 Mac에 Java Runtime/JDK가 없어 `./gradlew assembleDebug` 실패 |
-| iOS native project | 대기 | 현재 Mac에 CocoaPods와 full Xcode가 없어 `npx cap add ios` 실패 |
+| Android debug APK build | 대기 | Java/Gradle 단계는 통과. Android SDK 위치가 없어 `./gradlew assembleDebug` 실패 |
+| iOS native project | 완료 | Xcode/CocoaPods 설정 후 `npx cap add ios`, `npm run cap:sync` 성공 |
 
 ## Android 환경 준비 필요 항목
 
@@ -26,41 +26,37 @@ Android 모바일 브라우저 사진 선택 경로에서 GPS EXIF가 `null`로 
 
 ```text
 ./gradlew assembleDebug
-The operation couldn’t be completed. Unable to locate a Java Runtime.
+SDK location not found. Define a valid SDK location with an ANDROID_HOME environment variable or by setting the sdk.dir path in your project's local properties file at '/Users/a11791/Cursor/HeartPin/android/local.properties'.
 ```
 
 Galaxy 실기기 검증 전 준비:
 
 1. Android Studio 설치
 2. Android Studio에서 JDK/Android SDK 설치 확인
-3. `java -version` 확인
-4. `cd android && ./gradlew assembleDebug`
-5. Android Studio 또는 `npx cap run android`로 Galaxy 설치
+3. Android SDK 경로 확인. 기본값은 `/Users/a11791/Library/Android/sdk`
+4. `android/local.properties`에 `sdk.dir=/Users/a11791/Library/Android/sdk` 설정 또는 `ANDROID_HOME` 환경변수 설정
+5. `java -version` 확인
+6. `cd android && ./gradlew assembleDebug`
+7. Android Studio 또는 `npx cap run android`로 Galaxy 설치
 
 ## iOS 환경 준비 필요 항목
 
-현재 확인된 실패:
-
-```text
-npx cap add ios
-[error] CocoaPods is not installed.
-```
-
-추가 확인:
+현재 확인:
 
 ```text
 xcodebuild -version
-xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer directory '/Library/Developer/CommandLineTools' is a command line tools instance
+Xcode 26.5
+
+pod --version
+1.16.2
 ```
 
 iPhone 실기기 검증 전 준비:
 
-1. Xcode 설치
-2. `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`
-3. CocoaPods 설치
-4. `npx cap add ios`
-5. `npm run cap:sync`
-6. `npm run cap:ios`
+1. `npm run cap:sync`
+2. `npm run cap:ios`
+3. Xcode에서 signing team 선택
+4. iPhone을 연결하고 dev install 실행
 
 ## Test Photos
 

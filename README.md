@@ -43,6 +43,12 @@ cd android
 
 현재 Android scaffold는 Gradle 8.11.1, Android Gradle Plugin 8.7.2, Java 21 compatibility로 생성되어 있습니다. Java 24는 현재 Gradle wrapper와 맞지 않으므로 사용하지 않습니다.
 
+Android SDK를 못 찾는 경우 Android Studio에서 SDK를 설치한 뒤 `android/local.properties`에 로컬 경로를 설정합니다. 일반적인 경로는 다음과 같습니다.
+
+```properties
+sdk.dir=/Users/a11791/Library/Android/sdk
+```
+
 Galaxy 실기기 설치는 Android Studio에서 `android/` 프로젝트를 열거나, 환경 준비 후 `npm run cap:android`로 진행합니다.
 
 ### iOS
