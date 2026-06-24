@@ -62,11 +62,23 @@ function parse(buf) {
 
 // -> Promise<{date,time,lat,lng} | null>
 // NOTE: HEIC 등 비JPEG는 브라우저에서 파싱 불가 → null 반환 (실서비스는 백엔드 메타 추출로 교체)
+export async function readExifFromBytes(bytes, mimeType) {
+  if (!bytes || !/jpe?g/i.test(mimeType || "")) return null;
+  const buffer = bytes instanceof ArrayBuffer
+    ? bytes
+    : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  try {
+    return parse(buffer);
+  } catch {
+    return null;
+  }
+}
+
 export function readExif(file) {
   return new Promise((resolve) => {
     if (!file || !/jpe?g/i.test(file.type || "")) { resolve(null); return; }
     const r = new FileReader();
-    r.onload = (e) => { try { resolve(parse(e.target.result)); } catch { resolve(null); } };
+    r.onload = (e) => { readExifFromBytes(e.target.result, file.type).then(resolve); };
     r.onerror = () => resolve(null);
     r.readAsArrayBuffer(file.slice(0, 384 * 1024));
   });
