@@ -1,10 +1,15 @@
+export function apiUrl(path) {
+  const base = (import.meta.env.VITE_HEARTPIN_API_BASE_URL || "").replace(/\/$/, "");
+  return `${base}${path}`;
+}
+
 async function json(res) {
   if (!res.ok) throw new Error(`API ${res.status}: ${await res.text().catch(() => "")}`);
   return res.json();
 }
 
 async function op(body) {
-  const r = await json(await fetch("/api/ops", {
+  const r = await json(await fetch(apiUrl("/api/ops"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body)
@@ -15,7 +20,7 @@ async function op(body) {
 export const localAdapter = {
   async fetchState(since) {
     const q = since != null ? `?since=${since}` : "";
-    return json(await fetch(`/api/state${q}`));
+    return json(await fetch(apiUrl(`/api/state${q}`)));
   },
 
   uploadPhotos(files, owner, onProgress) {
@@ -30,7 +35,7 @@ export const localAdapter = {
 
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open("POST", "/api/photos");
+      xhr.open("POST", apiUrl("/api/photos"));
       xhr.upload.onprogress = (e) => {
         if (onProgress && e.lengthComputable) onProgress(e.loaded / e.total);
       };
