@@ -22,6 +22,8 @@ Android 모바일 브라우저 사진 선택 경로에서 GPS EXIF가 `null`로 
 | Android debug APK build | 완료 | `cd android && ./gradlew assembleDebug` 성공. APK: `android/app/build/outputs/apk/debug/app-debug.apk` |
 | iOS native project | 완료 | Xcode/CocoaPods 설정 후 `npx cap add ios`, `npm run cap:sync` 성공 |
 
+Android original media picker는 MVP 스파이크에서 한 번에 한 장만 선택하도록 제한한다. Galaxy 검증에서 GPS EXIF 보존이 확인된 `ACTION_PICK` + `MediaStore.setRequireOriginal(...)` 경로를 유지하기 위한 결정이며, JS bridge로 원본 파일 여러 장을 base64 전송하는 메모리 위험도 같이 줄인다. 다중 원본 업로드는 네이티브 임시 파일/네이티브 업로드 경로를 설계한 뒤 별도 작업으로 진행한다.
+
 ## Android 환경 준비 필요 항목
 
 현재 확인:
@@ -72,7 +74,7 @@ iPhone 실기기 검증 전 준비:
 | Platform | Path | Format | takenAt | lat/lng | Result |
 | --- | --- | --- | --- | --- | --- |
 | Galaxy | Mobile browser file input | JPEG | Not tested yet | Not tested yet | Pending real-device test |
-| Galaxy | Capacitor native picker | JPEG | Not tested yet | Not tested yet | Pending real-device test |
+| Galaxy | Android original media picker | JPEG | Preserved | Preserved | Verified with Supabase test upload |
 | iPhone | Capacitor native picker | HEIC | Not tested yet | Not tested yet | Blocked until iOS toolchain setup |
 | iPhone | Capacitor native picker | JPEG | Not tested yet | Not tested yet | Blocked until iOS toolchain setup |
 

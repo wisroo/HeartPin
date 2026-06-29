@@ -37,9 +37,10 @@ function safeBaseName(name) {
   return ascii || "photo";
 }
 
-export function buildTestOriginalPath(userId, uploadSessionId, item) {
+export function buildTestOriginalPath(userId, uploadSessionId, item, index = 0) {
   const ext = extensionFor(item);
-  return `test-originals/${userId}/${uploadSessionId}/${safeBaseName(item.name || item.file?.name)}.${ext}`;
+  const prefix = String(index + 1).padStart(3, "0");
+  return `test-originals/${userId}/${uploadSessionId}/${prefix}-${safeBaseName(item.name || item.file?.name)}.${ext}`;
 }
 
 function normalizeUploadItem(item) {
@@ -103,7 +104,7 @@ export function createSupabaseAdapter({ client = createSupabaseClient() } = {}) 
 
       for (let i = 0; i < normalized.length; i += 1) {
         const item = normalized[i];
-        const path = buildTestOriginalPath(user.id, uploadSessionId, item);
+        const path = buildTestOriginalPath(user.id, uploadSessionId, item, i);
         const body = item.bytes || item.file;
         const mimeType = item.mimeType || item.file?.type || "application/octet-stream";
         assertSupabaseOk(

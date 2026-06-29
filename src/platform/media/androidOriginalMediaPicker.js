@@ -37,8 +37,8 @@ function normalizeTakenAt(value) {
   return value;
 }
 
-export async function pickAndroidOriginalPhotos({ source = "library", multiple = true } = {}) {
+export async function pickAndroidOriginalPhotos({ source = "library" } = {}) {
   if (source === "camera") throw new Error("Android original media picker only supports library selection.");
-  const result = await HeartPinMedia.pickImages({ multiple });
+  const result = await HeartPinMedia.pickImages({ multiple: false });
   return (result.photos || []).map(normalizeAndroidPhoto);
 }

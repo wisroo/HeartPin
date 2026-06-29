@@ -30,7 +30,7 @@ describe("pickAndroidOriginalPhotos", () => {
 
     const [item] = await pickAndroidOriginalPhotos({ source: "library", multiple: true });
 
-    expect(mocks.pickImages).toHaveBeenCalledWith({ multiple: true });
+    expect(mocks.pickImages).toHaveBeenCalledWith({ multiple: false });
     expect(item).toMatchObject({
       name: "gps.jpg",
       mimeType: "image/jpeg",

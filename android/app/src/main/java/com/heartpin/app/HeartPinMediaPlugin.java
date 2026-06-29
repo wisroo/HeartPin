@@ -46,6 +46,7 @@ public class HeartPinMediaPlugin extends Plugin {
     static final String MEDIA_LOCATION = "mediaLocation";
     static final String READ_MEDIA_IMAGES = "readMediaImages";
     static final String READ_EXTERNAL = "readExternal";
+    private static final int MAX_ORIGINAL_BYTES = 25 * 1024 * 1024;
 
     @PluginMethod
     public void pickImages(PluginCall call) {
@@ -81,7 +82,6 @@ public class HeartPinMediaPlugin extends Plugin {
     private void openPicker(PluginCall call) {
         Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
         intent.setType("image/*");
-        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, call.getBoolean("multiple", true));
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         startActivityForResult(call, intent, "pickImagesResult");
     }
@@ -96,6 +96,10 @@ public class HeartPinMediaPlugin extends Plugin {
 
         try {
             List<Uri> uris = resultUris(result.getData());
+            if (uris.size() > 1) {
+                call.reject("Android 원본 위치정보 업로드는 현재 한 장씩만 지원해요");
+                return;
+            }
             JSArray photos = new JSArray();
             for (Uri uri : uris) {
                 photos.put(readPhoto(uri));
@@ -126,6 +130,9 @@ public class HeartPinMediaPlugin extends Plugin {
     private JSObject readPhoto(Uri uri) throws Exception {
         ContentResolver resolver = getContext().getContentResolver();
         byte[] bytes = readOriginalBytes(resolver, uri);
+        if (bytes.length > MAX_ORIGINAL_BYTES) {
+            throw new IllegalStateException("Selected original image is too large for bridge upload");
+        }
 
         ExifInterface exif = readExif(bytes);
         float[] latLng = new float[2];
@@ -169,6 +176,9 @@ public class HeartPinMediaPlugin extends Plugin {
             byte[] buffer = new byte[64 * 1024];
             int read;
             while ((read = input.read(buffer)) != -1) {
+                if (output.size() + read > MAX_ORIGINAL_BYTES) {
+                    throw new IllegalStateException("Selected original image is too large for bridge upload");
+                }
                 output.write(buffer, 0, read);
             }
             return output.toByteArray();

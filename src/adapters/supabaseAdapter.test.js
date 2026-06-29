@@ -19,8 +19,16 @@ function makeClient({ user = { id: "user-123" }, uploadError = null, insertError
 
 describe("buildTestOriginalPath", () => {
   it("scopes temporary originals by user and session", () => {
-    expect(buildTestOriginalPath("user-123", "session-abc", { name: "서울 여행 1.JPG" }))
-      .toBe("test-originals/user-123/session-abc/1.jpg");
+    expect(buildTestOriginalPath("user-123", "session-abc", { name: "서울 여행 1.JPG" }, 0))
+      .toBe("test-originals/user-123/session-abc/001-1.jpg");
+  });
+
+  it("keeps duplicate original names unique within one session", () => {
+    const first = buildTestOriginalPath("user-123", "session-abc", { name: "gps.jpg" }, 0);
+    const second = buildTestOriginalPath("user-123", "session-abc", { name: "gps.jpg" }, 1);
+
+    expect(first).toBe("test-originals/user-123/session-abc/001-gps.jpg");
+    expect(second).toBe("test-originals/user-123/session-abc/002-gps.jpg");
   });
 });
 
@@ -58,7 +66,7 @@ describe("supabaseAdapter.uploadPhotos", () => {
 
     expect(client.storage.from).toHaveBeenCalledWith("photos");
     expect(client.spies.upload).toHaveBeenCalledWith(
-      "test-originals/user-123/20260625T010203000Z/gps.jpg",
+      "test-originals/user-123/20260625T010203000Z/001-gps.jpg",
       bytes,
       { contentType: "image/jpeg", upsert: false },
     );
@@ -67,7 +75,7 @@ describe("supabaseAdapter.uploadPhotos", () => {
       owner: "bara",
       user_id: "user-123",
       upload_session_id: "20260625T010203000Z",
-      storage_path: "test-originals/user-123/20260625T010203000Z/gps.jpg",
+      storage_path: "test-originals/user-123/20260625T010203000Z/001-gps.jpg",
       lat: 37.5,
       lng: 127.0,
       source: "capacitor-photos",
