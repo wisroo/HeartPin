@@ -14,6 +14,7 @@ Android 모바일 브라우저 사진 선택 경로에서 GPS EXIF가 `null`로 
 | --- | --- | --- |
 | Web media picker adapter | 완료 | `src/platform/media/webMediaPicker.js` |
 | Capacitor media picker adapter | 완료 | `src/platform/media/capacitorMediaPicker.js` |
+| Android original media picker plugin | 완료 | `HeartPinMediaPlugin` + `ACCESS_MEDIA_LOCATION` + `MediaStore.setRequireOriginal(...)` |
 | Mobile upload flow adapter 연결 | 완료 | `src/mobile/MobileUploadFlow.jsx` |
 | Supabase temporary upload path | 완료 | `photos/test-originals/<auth.uid()>/...`, `test_uploads` |
 | Android native project | 완료 | `android/` |
@@ -56,6 +57,8 @@ iPhone 실기기 검증 전 준비:
 3. Xcode에서 signing team 선택
 4. iPhone을 연결하고 dev install 실행
 
+현재 회사 노트북에서는 iOS signing/dev install 검증이 제한된다. 과거 테스트에서 Capacitor iOS 사진 선택 경로가 위치정보를 보존하는 것으로 확인됐으므로, MVP 단계에서는 iOS는 기존 Capacitor Camera/Photos picker를 유지한다. iOS native picker는 정식 앱 UX 개선 단계에서 `PHPickerViewController` 기반으로 재검토한다.
+
 ## Test Photos
 
 | Asset | Format | Has GPS Before Test | Notes |
@@ -83,7 +86,7 @@ iPhone 실기기 검증 전 준비:
 6. Install the debug app on device.
 7. Sign in with the Supabase shared auth account.
 8. Prepare one JPEG photo with known GPS metadata.
-9. Select the photo through the Capacitor app camera roll path.
+9. Select the photo through the Android original media picker path.
 10. Confirm `test_uploads.lat`, `test_uploads.lng`, and `test_uploads.taken_at` in Supabase.
 11. Confirm the original exists under `photos/test-originals/<auth.uid()>/...`, then delete the test object after verification.
 
@@ -103,5 +106,6 @@ iPhone 실기기 검증 전 준비:
 ## Decision Rule
 
 - If Galaxy Capacitor native picker preserves GPS, continue Supabase upload work through `pickPhotos()`.
-- If Galaxy Capacitor native picker still strips GPS, keep the Android ZIP/original-file workaround and treat native Android upload as a deeper native module task.
-- If iOS HEIC metadata is available through Capacitor `photo.exif`, keep HEIC support in native path. If not, require server-side or native HEIC metadata extraction before claiming iOS HEIC GPS support.
+- If Galaxy Android original media picker preserves GPS, keep `HeartPinMediaPlugin` as the Android library path and continue Supabase upload work through `pickPhotos()`.
+- If Galaxy Android original media picker still strips GPS, keep the Android ZIP/original-file workaround and treat native Android upload as a deeper MediaStore/SAF task.
+- Keep iOS on the existing Capacitor Camera/Photos picker for MVP because prior iOS testing preserved GPS metadata. Revisit a custom iOS native picker only when app-store UX polish becomes the priority.
