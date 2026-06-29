@@ -1,11 +1,12 @@
 /* HeartPin · 모바일 업로드 플로우 (디자인 핸드오프 #4: 런치→고르기→읽는 중→한 장씩 확인→완료)
  * 웹 번역 2건: 카메라롤 그리드 = OS 사진 선택기 경유 / 장소명 = 세션 부트스트랩
  * (자동 이름 "장소 N" → 사용자 수정 → 이후 근접(300m) 제안 — 역지오코딩은 Phase 5) */
-import { Fragment, useState, useRef } from "react";
+import { Fragment, useState } from "react";
 import { CHAR } from "../chars.js";
 import { HP_DATA, suggest, autoLine, hav } from "../data.js";
 import { buildTripFromGroups } from "../buildTrip.js";
 import * as api from "../api.js";
+import { pickPhotos } from "../platform/media/mediaPicker.js";
 
 // 근접 매칭: 세션 스팟 + 기록의 모든 스팟 중 300m 이내 최단
 function nearestSpot(item, sessionSpots) {
@@ -35,7 +36,7 @@ function Say({ who, tone, children }) {
 export default function MobileUploadFlow({ onApplyState, onOpenMap, hasTrips, inboxCount, onOpenInbox }) {
   const [screen, setScreen] = useState("launch"); // launch | pick | reading | confirm | done
   const [owner, setOwner] = useState(api.getOwner());
-  const [files, setFiles] = useState([]); // {id, file, url}
+  const [files, setFiles] = useState([]); // {id, file, mediaItem, url}
   const [sel, setSel] = useState(() => new Set());
   const [prog, setProg] = useState(0);
   const [errMsg, setErrMsg] = useState(null);
@@ -50,19 +51,32 @@ export default function MobileUploadFlow({ onApplyState, onOpenMap, hasTrips, in
   const [done, setDone] = useState(null); // {bySpot, droppedN, skippedN, tripLabel}
   const [saving, setSaving] = useState(false);
 
-  const rollRef = useRef(null), camRef = useRef(null);
-
   const pickOwner = (who) => { api.setOwner(who); setOwner(who); };
 
-  const addFiles = (fileList) => {
-    const imgs = [...fileList].filter((f) => f.type.indexOf("image/") === 0 || /\.(heic|heif)$/i.test(f.name));
+  const addFiles = (items) => {
+    const imgs = [...items]
+      .map((item) => item.file ? item : { file: item })
+      .filter((item) => item.file.type.indexOf("image/") === 0 || /\.(heic|heif)$/i.test(item.file.name));
     setFiles((prev) => {
       const seen = new Set(prev.map((p) => p.file.name + "|" + p.file.size));
-      const fresh = imgs.filter((f) => !seen.has(f.name + "|" + f.size))
-        .map((f, i) => ({ id: "f" + Date.now() + "_" + i, file: f, url: URL.createObjectURL(f) }));
+      const fresh = imgs.filter((item) => !seen.has(item.file.name + "|" + item.file.size))
+        .map((item, i) => ({
+          id: "f" + Date.now() + "_" + i,
+          file: item.file,
+          mediaItem: item,
+          url: URL.createObjectURL(item.file),
+        }));
       setSel((s) => { const n = new Set(s); fresh.forEach((x) => n.add(x.id)); return n; });
       return prev.concat(fresh);
     });
+  };
+  const pickFromMedia = async (source) => {
+    try {
+      const items = await pickPhotos({ source, multiple: source !== "camera" });
+      addFiles(items);
+    } catch (e) {
+      setErrMsg(e.message);
+    }
   };
   const toggle = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
@@ -72,7 +86,7 @@ export default function MobileUploadFlow({ onApplyState, onOpenMap, hasTrips, in
     if (!chosen.length) return;
     setScreen("reading"); setProg(0); setErrMsg(null);
     try {
-      const result = await api.uploadPhotos(chosen.map((c) => c.file), owner || "bara", setProg);
+      const result = await api.uploadPhotos(chosen.map((c) => c.mediaItem || c.file), owner || "bara", setProg);
       onApplyState(result.state);
       setDupCount(result.duplicates.length);
       setQueue(result.added); setIdx(0); setDec({}); setSessionSpots([]);
@@ -228,19 +242,17 @@ export default function MobileUploadFlow({ onApplyState, onOpenMap, hasTrips, in
         <div className="hpu-body">
           <Say who="bara" tone="warm">여행 중 찍은 거 그냥 다 골라줘! 정리는 내가 할게 🐾</Say>
           <div className="hpu-sources">
-            <button className="hpu-src on" type="button" onClick={() => rollRef.current?.click()}>
+            <button className="hpu-src on" type="button" onClick={() => pickFromMedia("library")}>
               <span className="hpu-src-ico">🖼️</span>
               <span className="hpu-src-t">카메라롤</span>
               <span className="hpu-src-d">여러 장 선택</span>
             </button>
-            <button className="hpu-src" type="button" onClick={() => camRef.current?.click()}>
+            <button className="hpu-src" type="button" onClick={() => pickFromMedia("camera")}>
               <span className="hpu-src-ico">📷</span>
               <span className="hpu-src-t">바로 찍기</span>
               <span className="hpu-src-d">카메라 열기</span>
             </button>
           </div>
-          <input ref={rollRef} type="file" accept="image/*,.heic,.heif" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
-          <input ref={camRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
           {errMsg && <p className="hpu-err">⚠️ {errMsg}</p>}
           <div className="hpu-grid-head">
             <span>{files.length ? "고른 사진" : "아직 없어요"}</span>

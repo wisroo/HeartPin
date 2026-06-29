@@ -95,6 +95,10 @@ HeartPin에서 Codex가 작업할 때 따르는 프로젝트 운영 규칙이다
 ## Git Rules
 
 - 기존 unstaged 변경은 사용자 작업으로 보고 보존한다.
+- 새 작업 브랜치는 `type/short-kebab-name` 형식을 사용한다.
+  - 허용 type: `feature`, `fix`, `docs`, `chore`, `test`, `refactor`, `spike`
+  - 예: `feature/capacitor-mobile-upload-spike`, `fix/mobile-upload-gps`, `docs/supabase-setup`
+  - Codex 도구의 기본 `codex/` prefix는 이 프로젝트에서는 사용하지 않는다.
 - 관련 없는 변경을 함께 stage/commit하지 않는다.
 - 커밋 전에는 `git status --short`와 staged diff를 확인한다.
 - pull이 필요하고 로컬 변경이 있으면 `git pull --rebase --autostash`를 선호한다.

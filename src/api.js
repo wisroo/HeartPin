@@ -12,6 +12,13 @@ export function getApiMode() {
   return API_MODE;
 }
 
+export function signInToSupabase(email, password) {
+  if (API_MODE !== "supabase" || !adapter.signIn) {
+    throw new Error("Supabase 모드에서만 로그인할 수 있어요.");
+  }
+  return adapter.signIn(email, password);
+}
+
 // 기록 전체 조회 — since(버전)와 같으면 {unchanged:true}
 export async function fetchState(since) {
   return adapter.fetchState(since);

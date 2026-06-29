@@ -170,6 +170,7 @@ transfer_queue(id, photo_id, dest, tmp_url, status, expires_at)  -- 우체통
 ### Phase 1A — 모바일 네이티브 업로드 Spike 📱 (~1–2일)
 
 > **목표**: Play Store/App Store 배포 전, Capacitor dev build로 Android/iOS 실기기에 설치해 native photo picker가 EXIF/GPS를 보존하는지 확인한다.
+> 진행 결과와 실기기 체크리스트는 [Capacitor 모바일 업로드 Spike 결과](./CAPACITOR-MOBILE-UPLOAD-SPIKE.md)에 기록한다.
 
 | 작업 | 내용 | 공수 |
 |---|---|---|
