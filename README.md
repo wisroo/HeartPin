@@ -23,7 +23,15 @@ Phase 1 전환용 스키마와 환경변수 계약은 레포에 포함되어 있
 - `.env.example`: `VITE_HEARTPIN_API_MODE`, `VITE_HEARTPIN_API_BASE_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`
 - `docs/PHASE1_SUPABASE.md`: Supabase 프로젝트 셋업 순서
 
-현재 기본 실행 모드는 `local`입니다. Supabase SDK 연결이 들어간 뒤 `VITE_HEARTPIN_API_MODE=supabase`로 전환합니다.
+현재 기본 실행 모드는 `local`입니다. Supabase 실기기 업로드 테스트를 할 때는 `.env.local`에서 `VITE_HEARTPIN_API_MODE=supabase`로 전환합니다. 앱에는 Supabase URL과 publishable key만 넣고, 로그인 계정 비밀번호는 앱 로그인 화면에서 직접 입력합니다.
+
+Supabase 업로드 spike는 원본을 영구 보관하지 않습니다. 테스트 원본은 private `photos` bucket의 아래 prefix에 임시 저장하고, 메타데이터는 `test_uploads` 테이블에 기록합니다.
+
+```text
+photos/test-originals/<auth.uid()>/<upload_session_id>/<safe_file_name>
+```
+
+실기기에서 Galaxy/iPhone 모두 같은 Wi-Fi나 Mac 로컬 서버에 의존하지 않고 Supabase로 업로드를 검증할 수 있습니다.
 
 ## 모바일 앱 개발 환경
 
@@ -62,6 +70,14 @@ Capacitor dev app에서 Phase 0 로컬 서버를 쓰려면 APK 빌드 전에 `.e
 
 ```bash
 VITE_HEARTPIN_API_BASE_URL=http://10.250.186.63:3300
+```
+
+Supabase 테스트 모드에서는 위 로컬 서버 주소가 필요 없습니다. APK 빌드 전에 `.env.local`을 다음처럼 둡니다.
+
+```bash
+VITE_HEARTPIN_API_MODE=supabase
+VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 ```
 
 ### iOS

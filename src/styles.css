@@ -483,6 +483,15 @@ h1,h2,h3{font-family:var(--fd);font-weight:400;letter-spacing:.01em;}
 
 /* ═══════════ Phase 0 additions: 부트 화면 · 업로드 owner 토글 ═══════════ */
 .hp-boot{display:flex;align-items:center;justify-content:center;height:100%;text-align:center;color:var(--ink2);font-size:15px;line-height:1.8;}
+.hp-login{width:min(360px,calc(100vw - 36px));display:flex;flex-direction:column;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:0 8px 26px var(--shadow-soft);text-align:left;}
+.hp-login h1{margin:0;color:var(--ink);font-size:24px;}
+.hp-login p{margin:0 0 4px;color:var(--ink2);font-size:14px;line-height:1.5;}
+.hp-login label{display:flex;flex-direction:column;gap:5px;color:var(--ink2);font-size:13px;}
+.hp-login input{width:100%;border:1.5px solid var(--line2);border-radius:10px;background:var(--card-2);color:var(--ink);font-family:var(--fb);font-size:15px;padding:9px 10px;}
+.hp-login input:focus{outline:none;border-color:var(--warm);}
+.hp-login button{border:1.5px solid var(--warm);background:var(--warm);color:#fff;font-family:var(--fd);font-size:16px;padding:10px 14px;border-radius:12px;box-shadow:0 3px 0 var(--warm-deep);}
+.hp-login button:disabled{cursor:not-allowed;opacity:.55;}
+.hp-login-error{color:#c0563a;font-size:13px;}
 .hp-upload-err{color:#c0563a;font-size:13px;margin:8px 0 0;}
 .hp-upload-owner{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;color:var(--ink2);}
 .hp-owner-btn{display:flex;align-items:center;gap:6px;border:1.5px solid var(--line2);background:var(--card);border-radius:18px;padding:4px 12px;font-family:var(--fd);font-size:13.5px;color:var(--ink2);cursor:pointer;}

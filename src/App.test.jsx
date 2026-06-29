@@ -1,8 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App.jsx";
 import { useHeartPinState } from "./core/useHeartPinState.js";
 import { useResponsiveMode } from "./core/useResponsiveMode.js";
+import * as api from "./api.js";
 
 vi.mock("./core/useHeartPinState.js", () => ({
   useHeartPinState: vi.fn(),
@@ -10,6 +11,11 @@ vi.mock("./core/useHeartPinState.js", () => ({
 
 vi.mock("./core/useResponsiveMode.js", () => ({
   useResponsiveMode: vi.fn(),
+}));
+
+vi.mock("./api.js", () => ({
+  getApiMode: vi.fn(() => "local"),
+  signInToSupabase: vi.fn(),
 }));
 
 vi.mock("./web/WebApp.jsx", () => ({
@@ -51,6 +57,8 @@ describe("App", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useHeartPinState.mockReturnValue(appState);
+    api.getApiMode.mockReturnValue("local");
+    api.signInToSupabase.mockResolvedValue();
   });
 
   it("renders the web shell in web mode", () => {
@@ -69,5 +77,25 @@ describe("App", () => {
 
     expect(screen.getByTestId("mobile-app")).toBeInTheDocument();
     expect(screen.queryByTestId("web-app")).not.toBeInTheDocument();
+  });
+
+  it("renders Supabase login when a Supabase session is required", async () => {
+    useResponsiveMode.mockReturnValue("mobile");
+    api.getApiMode.mockReturnValue("supabase");
+    useHeartPinState.mockReturnValue({
+      ...appState,
+      data: null,
+      loadError: "Supabase 로그인이 필요해요",
+    });
+
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText("이메일"), { target: { value: "heartpin@example.com" } });
+    fireEvent.change(screen.getByLabelText("비밀번호"), { target: { value: "secret-password" } });
+    fireEvent.click(screen.getByRole("button", { name: "로그인" }));
+
+    await waitFor(() => {
+      expect(api.signInToSupabase).toHaveBeenCalledWith("heartpin@example.com", "secret-password");
+    });
   });
 });

@@ -117,6 +117,24 @@ create table if not exists public.transfer_queue (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.test_uploads (
+  id text primary key default gen_random_uuid()::text,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  upload_session_id text not null,
+  owner text not null check (owner in ('bara', 'nyong')),
+  storage_path text not null unique,
+  original_name text not null,
+  original_size bigint,
+  mime_type text,
+  taken_at timestamptz,
+  lat double precision,
+  lng double precision,
+  source text,
+  deleted_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create or replace function public.touch_updated_at()
 returns trigger
 language plpgsql
@@ -155,6 +173,10 @@ drop trigger if exists touch_transfer_queue_updated_at on public.transfer_queue;
 create trigger touch_transfer_queue_updated_at before update on public.transfer_queue
 for each row execute function public.touch_updated_at();
 
+drop trigger if exists touch_test_uploads_updated_at on public.test_uploads;
+create trigger touch_test_uploads_updated_at before update on public.test_uploads
+for each row execute function public.touch_updated_at();
+
 alter table public.trips enable row level security;
 alter table public.days enable row level security;
 alter table public.spots enable row level security;
@@ -162,6 +184,7 @@ alter table public.moments enable row level security;
 alter table public.inbox_items enable row level security;
 alter table public.photo_copies enable row level security;
 alter table public.transfer_queue enable row level security;
+alter table public.test_uploads enable row level security;
 
 drop policy if exists "authenticated trips" on public.trips;
 create policy "authenticated trips" on public.trips
@@ -184,6 +207,11 @@ create policy "authenticated photo_copies" on public.photo_copies
 drop policy if exists "authenticated transfer_queue" on public.transfer_queue;
 create policy "authenticated transfer_queue" on public.transfer_queue
   for all to authenticated using (true) with check (true);
+drop policy if exists "own test_uploads" on public.test_uploads;
+create policy "own test_uploads" on public.test_uploads
+  for all to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
 
 insert into storage.buckets (id, name, public)
 values ('photos', 'photos', false)
@@ -191,13 +219,55 @@ on conflict (id) do nothing;
 
 drop policy if exists "authenticated read photos" on storage.objects;
 create policy "authenticated read photos" on storage.objects
-  for select to authenticated using (bucket_id = 'photos');
+  for select to authenticated using (
+    bucket_id = 'photos'
+    and (
+      (storage.foldername(name))[1] in ('display', 'thumb')
+      or (
+        (storage.foldername(name))[1] = 'test-originals'
+        and (storage.foldername(name))[2] = (select auth.uid()::text)
+      )
+    )
+  );
 drop policy if exists "authenticated write photos" on storage.objects;
 create policy "authenticated write photos" on storage.objects
-  for insert to authenticated with check (bucket_id = 'photos');
+  for insert to authenticated with check (
+    bucket_id = 'photos'
+    and (
+      (storage.foldername(name))[1] in ('display', 'thumb')
+      or (
+        (storage.foldername(name))[1] = 'test-originals'
+        and (storage.foldername(name))[2] = (select auth.uid()::text)
+      )
+    )
+  );
 drop policy if exists "authenticated update photos" on storage.objects;
 create policy "authenticated update photos" on storage.objects
-  for update to authenticated using (bucket_id = 'photos') with check (bucket_id = 'photos');
+  for update to authenticated using (
+    bucket_id = 'photos'
+    and (
+      (storage.foldername(name))[1] in ('display', 'thumb')
+      or (
+        (storage.foldername(name))[1] = 'test-originals'
+        and (storage.foldername(name))[2] = (select auth.uid()::text)
+      )
+    )
+  ) with check (
+    bucket_id = 'photos'
+    and (
+      (storage.foldername(name))[1] in ('display', 'thumb')
+      or (
+        (storage.foldername(name))[1] = 'test-originals'
+        and (storage.foldername(name))[2] = (select auth.uid()::text)
+      )
+    )
+  );
 drop policy if exists "authenticated delete photos" on storage.objects;
 create policy "authenticated delete photos" on storage.objects
-  for delete to authenticated using (bucket_id = 'photos');
+  for delete to authenticated using (
+    bucket_id = 'photos'
+    and (
+      (storage.foldername(name))[1] = 'test-originals'
+      and (storage.foldername(name))[2] = (select auth.uid()::text)
+    )
+  );

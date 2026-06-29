@@ -15,6 +15,7 @@ Android 모바일 브라우저 사진 선택 경로에서 GPS EXIF가 `null`로 
 | Web media picker adapter | 완료 | `src/platform/media/webMediaPicker.js` |
 | Capacitor media picker adapter | 완료 | `src/platform/media/capacitorMediaPicker.js` |
 | Mobile upload flow adapter 연결 | 완료 | `src/mobile/MobileUploadFlow.jsx` |
+| Supabase temporary upload path | 완료 | `photos/test-originals/<auth.uid()>/...`, `test_uploads` |
 | Android native project | 완료 | `android/` |
 | Android sync | 완료 | `npm run cap:sync` 성공 |
 | Android debug APK build | 완료 | `cd android && ./gradlew assembleDebug` 성공. APK: `android/app/build/outputs/apk/debug/app-debug.apk` |
@@ -74,26 +75,30 @@ iPhone 실기기 검증 전 준비:
 
 ## Android Test Procedure
 
-1. Run `npm run cap:sync`.
-2. Run `npm run cap:android`.
-3. Open the generated Android project in Android Studio.
-4. Connect Galaxy device with USB debugging enabled.
-5. Install the debug app on device.
-6. Prepare one JPEG photo with known GPS metadata.
-7. In mobile browser/PWA path, select the photo and record whether `lat`/`lng` is present.
-8. In Capacitor app path, select the same photo and record whether `lat`/`lng` is present.
-9. Compare browser vs native picker result in the table above.
+1. Set `.env.local` to Supabase mode.
+2. Run `npm run cap:sync`.
+3. Run `npm run cap:android`.
+4. Open the generated Android project in Android Studio.
+5. Connect Galaxy device with USB debugging enabled.
+6. Install the debug app on device.
+7. Sign in with the Supabase shared auth account.
+8. Prepare one JPEG photo with known GPS metadata.
+9. Select the photo through the Capacitor app camera roll path.
+10. Confirm `test_uploads.lat`, `test_uploads.lng`, and `test_uploads.taken_at` in Supabase.
+11. Confirm the original exists under `photos/test-originals/<auth.uid()>/...`, then delete the test object after verification.
 
 ## iOS Test Procedure
 
 1. Prepare Xcode and CocoaPods.
-2. Run `npx cap add ios`.
+2. Set `.env.local` to Supabase mode.
 3. Run `npm run cap:sync`.
 4. Run `npm run cap:ios`.
 5. Install the dev app on iPhone from Xcode.
-6. Prepare one HEIC and one JPEG photo with known GPS metadata.
-7. Select each photo in the Capacitor app.
-8. Record `takenAt`, `lat`, and `lng` in the table above.
+6. Sign in with the Supabase shared auth account.
+7. Prepare one HEIC and one JPEG photo with known GPS metadata.
+8. Select each photo in the Capacitor app.
+9. Confirm `test_uploads.lat`, `test_uploads.lng`, and `test_uploads.taken_at` in Supabase.
+10. Confirm the original exists under `photos/test-originals/<auth.uid()>/...`, then delete the test object after verification.
 
 ## Decision Rule
 

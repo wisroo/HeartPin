@@ -1,6 +1,8 @@
 /* HeartPin · app root — core state + platform shell */
+import { useState } from "react";
 import { useHeartPinState } from "./core/useHeartPinState.js";
 import { useResponsiveMode } from "./core/useResponsiveMode.js";
+import * as api from "./api.js";
 import Journey from "./components/Journey.jsx";
 import Inbox from "./components/Inbox.jsx";
 import Upload from "./components/Upload.jsx";
@@ -8,11 +10,54 @@ import TripPreview from "./components/TripPreview.jsx";
 import MobileApp from "./mobile/MobileApp.jsx";
 import WebApp from "./web/WebApp.jsx";
 
+function SupabaseLogin({ message }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.signInToSupabase(email.trim(), password);
+      if (import.meta.env.MODE !== "test") window.location.reload();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="hp-app hp-boot">
+      <form className="hp-login" onSubmit={submit}>
+        <h1>Supabase 로그인</h1>
+        <p>{message}</p>
+        <label>
+          이메일
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+        </label>
+        <label>
+          비밀번호
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
+        </label>
+        {error && <small className="hp-login-error">{error}</small>}
+        <button type="submit" disabled={busy || !email.trim() || !password}>{busy ? "로그인 중..." : "로그인"}</button>
+      </form>
+    </div>
+  );
+}
+
 export default function App() {
   const mode = useResponsiveMode();
   const app = useHeartPinState();
 
   if (app.loadError) {
+    if (api.getApiMode() === "supabase" && app.loadError.includes("Supabase 로그인이 필요")) {
+      return <SupabaseLogin message={app.loadError} />;
+    }
     return (
       <div className="hp-app hp-boot">
         <p>서버에 연결할 수 없어요 😢<br /><small>{app.loadError}</small><br /><small>Mac에서 <code>npm run demo</code>가 실행 중인지 확인해 주세요.</small></p>

@@ -36,7 +36,7 @@ function Say({ who, tone, children }) {
 export default function MobileUploadFlow({ onApplyState, onOpenMap, hasTrips, inboxCount, onOpenInbox }) {
   const [screen, setScreen] = useState("launch"); // launch | pick | reading | confirm | done
   const [owner, setOwner] = useState(api.getOwner());
-  const [files, setFiles] = useState([]); // {id, file, url}
+  const [files, setFiles] = useState([]); // {id, file, mediaItem, url}
   const [sel, setSel] = useState(() => new Set());
   const [prog, setProg] = useState(0);
   const [errMsg, setErrMsg] = useState(null);
@@ -53,12 +53,19 @@ export default function MobileUploadFlow({ onApplyState, onOpenMap, hasTrips, in
 
   const pickOwner = (who) => { api.setOwner(who); setOwner(who); };
 
-  const addFiles = (fileList) => {
-    const imgs = [...fileList].filter((f) => f.type.indexOf("image/") === 0 || /\.(heic|heif)$/i.test(f.name));
+  const addFiles = (items) => {
+    const imgs = [...items]
+      .map((item) => item.file ? item : { file: item })
+      .filter((item) => item.file.type.indexOf("image/") === 0 || /\.(heic|heif)$/i.test(item.file.name));
     setFiles((prev) => {
       const seen = new Set(prev.map((p) => p.file.name + "|" + p.file.size));
-      const fresh = imgs.filter((f) => !seen.has(f.name + "|" + f.size))
-        .map((f, i) => ({ id: "f" + Date.now() + "_" + i, file: f, url: URL.createObjectURL(f) }));
+      const fresh = imgs.filter((item) => !seen.has(item.file.name + "|" + item.file.size))
+        .map((item, i) => ({
+          id: "f" + Date.now() + "_" + i,
+          file: item.file,
+          mediaItem: item,
+          url: URL.createObjectURL(item.file),
+        }));
       setSel((s) => { const n = new Set(s); fresh.forEach((x) => n.add(x.id)); return n; });
       return prev.concat(fresh);
     });
@@ -66,7 +73,7 @@ export default function MobileUploadFlow({ onApplyState, onOpenMap, hasTrips, in
   const pickFromMedia = async (source) => {
     try {
       const items = await pickPhotos({ source, multiple: source !== "camera" });
-      addFiles(items.map((item) => item.file));
+      addFiles(items);
     } catch (e) {
       setErrMsg(e.message);
     }
@@ -79,7 +86,7 @@ export default function MobileUploadFlow({ onApplyState, onOpenMap, hasTrips, in
     if (!chosen.length) return;
     setScreen("reading"); setProg(0); setErrMsg(null);
     try {
-      const result = await api.uploadPhotos(chosen.map((c) => c.file), owner || "bara", setProg);
+      const result = await api.uploadPhotos(chosen.map((c) => c.mediaItem || c.file), owner || "bara", setProg);
       onApplyState(result.state);
       setDupCount(result.duplicates.length);
       setQueue(result.added); setIdx(0); setDec({}); setSessionSpots([]);
