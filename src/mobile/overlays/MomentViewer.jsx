@@ -30,9 +30,9 @@ export default function MomentViewer({ spot, startIdx = 0, nav, settings }) {
         ))}
       </div>
       <div className="hpm-moment-pager">
-        <button className="hpm-moment-arrow" disabled={i === 0} onClick={() => setI(i - 1)}>‹</button>
+        <button className="hpm-moment-arrow" disabled={i <= 0} onClick={() => setI(i - 1)}>‹</button>
         <span className="hpm-moment-count">{i + 1} / {photos.length}</span>
-        <button className="hpm-moment-arrow" disabled={i === photos.length - 1} onClick={() => setI(i + 1)}>›</button>
+        <button className="hpm-moment-arrow" disabled={i >= photos.length - 1} onClick={() => setI(i + 1)}>›</button>
       </div>
     </div>
   );

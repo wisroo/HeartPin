@@ -12,6 +12,8 @@ test("renders inbox items and opens moment on tap", () => {
   const nav = { openMomentItem: vi.fn(), toast: vi.fn() };
   render(<InboxScreen app={app} nav={nav} settings={{ tone: "다정" }} />);
   expect(screen.getByText("광안대교")).toBeInTheDocument();
+  fireEvent.click(screen.getByText("광안대교").closest(".hpm-icard-cover"));
+  expect(nav.openMomentItem).toHaveBeenCalledWith(expect.objectContaining({ id: "i1" }));
 });
 
 test("empty inbox shows empty state", () => {
