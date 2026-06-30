@@ -19,6 +19,17 @@
 - Do NOT touch `src/web/` or the desktop `Home.jsx`.
 - After each task: `npm test -- --run` green, `git diff --check` clean. Build (`npm run build`) verified at integration tasks.
 
+## Execution Order (build-safe)
+
+The existing `MobileApp.jsx` imports `MobileMapShell` + `MobileUploadFlow`, and `App.jsx` imports `MobileApp`. To keep `npm run build` green after every task, **all new components are built as un-wired leaves first; the `MobileApp` rewrite and the deletion of the old shells happen last (Task 15)**. Until Task 15, the old mobile shell stays live and the new files are simply not imported by `App.jsx`.
+
+Dispatch order: **1 → 2 → 3 → 4 → 5 → 7 → 8 → 9 → 11 → 12 → 10 → 13 → 14 → 6 → 15**.
+
+- Tasks 5, 10, 14 are **create-only** here (no deletions, no `MobileApp` changes).
+- Task 6 (`MobileShell`) is built after all screens/overlays exist so its imports resolve.
+- Task 15 is the single integration step: rewrite `MobileApp` to the gate, delete `MobileMapShell` + `MobileUploadFlow` + their tests, remove the old `hpm-*`/`hpu-*` CSS, then full build/verify.
+- During 1→14 the new design CSS coexists with the old `MobileMapShell` rules (same class names in a few cases); the old rules are removed in Task 15. This only affects manual runtime appearance of the soon-deleted old shell, not tests or build.
+
 ---
 
 ## File Structure
@@ -362,6 +373,8 @@ git commit -m "feat(mobile): thin useAuth seam (local skips login; supabase gate
 ## Phase 1 — Shell & routing
 
 ### Task 5: `LaunchSplash` + `MobileApp` entry gate
+
+> **Execution-order override (build-safe):** This task creates ONLY `LaunchSplash` (Steps 1–4, then commit just the two LaunchSplash files). The `MobileApp` gate rewrite (Steps 5–8) is DEFERRED to Task 15 — do not modify `MobileApp.jsx` here. Its code below is the reference Task 15 will use.
 
 **Files:**
 - Create: `src/mobile/LaunchSplash.jsx`, `src/mobile/LaunchSplash.test.jsx`
@@ -822,6 +835,8 @@ git commit -m "feat(mobile): 여정 home + trip detail on real data"
 
 ### Task 10: `MapScreen` (replaces `MobileMapShell`)
 
+> **Execution-order override (build-safe):** CREATE `MapScreen.jsx` + test only (Steps 1–4, then commit just MapScreen). The `MobileMapShell` deletion and old-CSS removal (Steps 5–7) are DEFERRED to Task 15 — deleting it now breaks the still-live old `MobileApp`.
+
 **Files:** Create `src/mobile/screens/MapScreen.jsx`, `MapScreen.test.jsx`; Delete `src/mobile/MobileMapShell.jsx`; Modify `src/styles.css` (remove old `hpm-shell/hpm-map/hpm-sheet/hpm-grabber/hpm-tabs/hpm-tab-ico/hpm-add/hpm-badge` rules that belonged to MobileMapShell).
 
 **Interfaces:** `MapScreen({ trip, initialSpotIdx, nav, settings })` — port from `docs/design-reference/hpm-map.jsx`. Swaps: `window.HP_ORDERED(trip)` → `ordered(trip)` from `../../data.js`; real photos in rail/list cards; tile URL + attribution from `../../mapUtil.js` (`import { TILES, ATTR }`) instead of the hardcoded CARTO string; char avatars from `CHAR`. Keep the 3-snap sheet, spot rail, animated pins. Empty trip (`!trip`) → render an empty-state message instead of initializing Leaflet.
@@ -1001,6 +1016,8 @@ git commit -m "feat(mobile): cinematic journey player on real data"
 
 ### Task 14: `UploadSheet` (design UI + real pipeline) and retire old upload flow
 
+> **Execution-order override (build-safe):** CREATE `UploadSheet.jsx` + test only (Steps 1–4, then commit just UploadSheet). The `MobileUploadFlow` deletion (Steps 5–6) is DEFERRED to Task 15 — the still-live old `MobileApp` imports it.
+
 **Files:** Create `src/mobile/overlays/UploadSheet.jsx`, `UploadSheet.test.jsx`; Delete `src/mobile/MobileUploadFlow.jsx`; remove its now-unused `hpu-*` CSS only if no longer referenced.
 
 **Interfaces:** `UploadSheet({ app, nav, settings })` — design upload visual (`docs/design-reference/hpm-upload.jsx`: `hpm-overlay`+`hpm-sheet-modal` pick step, `hpm-full` one-by-one confirm) backed by the REAL pipeline ported from `MobileUploadFlow.jsx`:
@@ -1049,11 +1066,15 @@ git commit -m "feat(mobile): UploadSheet (design UI on real upload pipeline); re
 
 ## Phase 5 — Integration & polish
 
-### Task 15: viewport/safe-area, fonts, full verification
+### Task 15: integration — wire `MobileApp` gate, delete old shells, viewport/fonts, verify
 
-**Files:** Modify `index.html`
+> **This is the integration step deferred from Tasks 5/10/14.** Do groups A→B→(C steps below)→D in order; each ends green.
+> - **A. Wire MobileApp:** Replace `src/mobile/MobileApp.jsx` with the gate from Task 5 Step 5 (splash → login if `auth.needsLogin` → pick-side if `!settings.myChar` → `MobileShell`); add `src/mobile/MobileApp.test.jsx` from Task 5 Step 6; `npm test -- --run src/mobile/MobileApp.test.jsx` → PASS.
+> - **B. Delete old shells:** `git rm src/mobile/MobileMapShell.jsx src/mobile/MobileUploadFlow.jsx src/mobile/MobileUploadFlow.test.jsx`; `grep -rn "MobileMapShell\|MobileUploadFlow" src` → empty. Remove old `MobileMapShell` CSS from `src/styles.css` (`hpm-shell`, `hpm-grabber`, `hpm-tabs`, `hpm-tab-ico`, `hpm-add`, `.hpm-badge`, pre-Task-1 `.hpm-map`/`.hpm-sheet` variants); `grep -rn "hpu-" src` → if empty remove `hpu-*` rules; verify `grep -rn "hpm-shell\|hpm-tabs\|hpm-grabber" src` → empty. Commit `feat(mobile): wire MobileApp gate; remove old MobileMapShell + MobileUploadFlow`.
 
-**Interfaces:** none new.
+**Files:** Modify `src/mobile/MobileApp.jsx`, `src/styles.css`, `index.html`; Create `src/mobile/MobileApp.test.jsx`; Delete `src/mobile/MobileMapShell.jsx`, `src/mobile/MobileUploadFlow.jsx`, `src/mobile/MobileUploadFlow.test.jsx`
+
+**Interfaces:** consumes everything from Tasks 2–14.
 
 - [ ] **Step 1: Add `viewport-fit=cover` + fonts to `index.html`**
 
