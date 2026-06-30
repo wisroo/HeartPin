@@ -841,7 +841,7 @@ h1,h2,h3{font-family:var(--fd);font-weight:400;letter-spacing:.01em;}
 .hpm-top .ic svg{width:18px;height:18px;}
 
 /* ============ bottom tab bar (adapted: safe-area bottom padding) ============ */
-.hpm-tabbar{flex:none;position:relative;z-index:40;display:flex;align-items:flex-end;justify-content:space-around;background:var(--card);border-top:1px solid var(--line);padding:10px 6px calc(env(safe-area-inset-bottom) + 16px);box-shadow:0 -4px 18px var(--shadow-soft);}
+.hpm-tabbar{flex:none;position:relative;z-index:40;display:flex;align-items:flex-end;justify-content:space-around;background:var(--card);border-top:1px solid var(--line);padding:10px 6px calc(env(safe-area-inset-bottom) + 22px);box-shadow:0 -4px 18px var(--shadow-soft);}
 .hpm-tab{display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;color:var(--ink2);background:none;padding:2px 0;transition:color .14s;}
 .hpm-tab .ti{width:26px;height:26px;display:flex;align-items:center;justify-content:center;}
 .hpm-tab .ti svg{width:23px;height:23px;}
@@ -926,14 +926,14 @@ h1,h2,h3{font-family:var(--fd);font-weight:400;letter-spacing:.01em;}
 /* ============ MAP ============ */
 .hpm-map-screen{position:absolute;inset:0;display:flex;flex-direction:column;}
 .hpm-leaflet{position:absolute;inset:0;background:#cfe3ec;z-index:0;}
-.leaflet-container{font-family:var(--fb);}
+.hpm .leaflet-container{font-family:var(--fb);}
 .hpm-map-skin-cozy .leaflet-tile-pane{filter:sepia(.16) saturate(1.12) brightness(1.04) hue-rotate(-6deg);}
 .hpm-map-skin-sepia .leaflet-tile-pane{filter:sepia(.44) saturate(1.05) brightness(1.02);}
 .hpm-map-skin-forest .leaflet-tile-pane{filter:sepia(.12) saturate(1.2) hue-rotate(42deg) brightness(1.02);}
-.leaflet-control-zoom{display:none;}
-.leaflet-control-attribution{background:rgba(255,255,255,.7)!important;font-size:9px!important;}
+.hpm .leaflet-control-zoom{display:none;}
+.hpm .leaflet-control-attribution{background:rgba(255,255,255,.7)!important;font-size:9px!important;}
 
-.leaflet-div-icon{background:transparent;border:none;}
+.hpm .leaflet-div-icon{background:transparent;border:none;}
 .hpm-pin .hd{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50% 50% 50% 8px;transform:rotate(45deg);background:var(--s);border:2.5px solid #fff;box-shadow:0 4px 9px rgba(0,0,0,.28);font-family:var(--fd);color:#fff;font-size:13px;}
 .hpm-pin .hd>span{transform:rotate(-45deg);line-height:1;}
 .hpm-pin.done .hd{background:var(--sage);}
