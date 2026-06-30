@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Avatar } from "../ui/MobileAtoms.jsx";
+import { Avatar, Ico } from "../ui/MobileAtoms.jsx";
 
 export default function LoginScreen({ onSignIn, settings }) {
   const [email, setEmail] = useState("");
@@ -13,7 +13,7 @@ export default function LoginScreen({ onSignIn, settings }) {
   };
   return (
     <div className="hpm-screen" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 28 }}>
-      <div className="mk" style={{ width: 48, height: 48, marginBottom: 10 }} />
+      <div className="hpm-logo" style={{ width: 48, height: 48, marginBottom: 10 }}><Ico.heart /></div>
       <div style={{ display: "flex", alignItems: "center", gap: 3, marginBottom: 6 }}><Avatar who="bara" size={36} /><span style={{ color: "var(--p)" }}>♥</span><Avatar who="nyong" size={36} /></div>
       <h1 style={{ fontFamily: "var(--fd)", fontSize: 22, color: "var(--ink)", marginBottom: 16 }}>HeartPin 로그인</h1>
       <form onSubmit={submit} style={{ width: "100%", maxWidth: 320, display: "flex", flexDirection: "column", gap: 10 }}>

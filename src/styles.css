@@ -533,6 +533,8 @@ h1,h2,h3{font-family:var(--fd);font-weight:400;letter-spacing:.01em;}
 .hp-mappick-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid var(--line);font-size:13px;color:var(--ink2);}
 
 /* ===== mobile design shell (ported from HeartPin Mobile.html) ===== */
+.hpm .hpm-logo{position:relative;flex:none;display:flex;align-items:center;justify-content:center;border-radius:60% 40% 55% 45% / 50% 55% 45% 50%;background:linear-gradient(150deg,var(--p),var(--pd));box-shadow:0 4px 12px color-mix(in srgb,var(--p) 45%,transparent);color:var(--card);}
+.hpm .hpm-logo svg{width:54%;height:54%;}
 
 /* ============ design tokens (theme-driven) ============ */
 .hpm{
@@ -585,7 +587,7 @@ h1,h2,h3{font-family:var(--fd);font-weight:400;letter-spacing:.01em;}
 .hpm-pad{padding:6px 18px 22px;}
 
 /* app top bar */
-.hpm-top{flex:none;display:flex;align-items:center;gap:10px;padding:4px 18px 10px;}
+.hpm-top{flex:none;display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 4px) 18px 10px;}
 .hpm-top .mk{width:26px;height:26px;flex:none;border-radius:60% 40% 55% 45% / 50% 55% 45% 50%;background:linear-gradient(150deg,var(--p),var(--pd));position:relative;box-shadow:0 3px 8px color-mix(in srgb,var(--p) 45%,transparent);}
 .hpm-top .mk::after{content:"";position:absolute;left:50%;top:54%;transform:translate(-50%,-50%) rotate(-7deg);width:11px;height:10px;background:var(--card);clip-path:path("M7 13.5C2.2 9.6 0 6.8 0 4 0 1.8 1.7 0 3.8 0 5.2 0 6.4.9 7 2.1 7.6.9 8.8 0 10.2 0 12.3 0 14 1.8 14 4c0 2.8-2.2 5.6-7 9.5Z");}
 .hpm-top .ttl{font-family:var(--fd);font-size:24px;line-height:1;flex:1;color:var(--ink);}
@@ -699,7 +701,7 @@ h1,h2,h3{font-family:var(--fd);font-weight:400;letter-spacing:.01em;}
 .hpm-mapchars img{width:38px;height:38px;border-radius:50%;border:2.5px solid #fff;object-fit:cover;box-shadow:0 4px 9px rgba(0,0,0,.3);background:#fff;}
 .hpm-mapchars img:last-child{margin-left:-9px;}
 
-.hpm-map-top{position:absolute;top:0;left:0;right:0;z-index:20;display:flex;gap:8px;padding:8px 14px;}
+.hpm-map-top{position:absolute;top:0;left:0;right:0;z-index:20;display:flex;gap:8px;padding:calc(env(safe-area-inset-top) + 8px) 14px 8px;}
 .hpm-map-back{width:34px;height:34px;flex:none;border-radius:11px;border:1.5px solid var(--line);background:color-mix(in srgb,var(--card) 94%,transparent);display:flex;align-items:center;justify-content:center;font-family:var(--fd);font-size:18px;color:var(--ink);box-shadow:0 2px 8px var(--shadow-soft);}
 .hpm-map-title{flex:1;display:flex;align-items:center;padding:0 13px;border-radius:11px;border:1.5px solid var(--line);background:color-mix(in srgb,var(--card) 94%,transparent);font-family:var(--fd);font-size:15px;color:var(--ink);box-shadow:0 2px 8px var(--shadow-soft);}
 

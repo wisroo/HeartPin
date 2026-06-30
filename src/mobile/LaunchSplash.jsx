@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Avatar } from "./ui/MobileAtoms.jsx";
+import { Avatar, Ico } from "./ui/MobileAtoms.jsx";
 import { dday } from "./useMobileSettings.js";
 
 export default function LaunchSplash({ settings, onDone }) {
@@ -7,7 +7,7 @@ export default function LaunchSplash({ settings, onDone }) {
   return (
     <button type="button" aria-label="시작" className="hpm-screen hpm-splash" onClick={onDone}
       style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, width: "100%", border: "none", background: "var(--paper)" }}>
-      <div className="mk" style={{ width: 64, height: 64 }} />
+      <div className="hpm-logo" style={{ width: 64, height: 64 }}><Ico.heart /></div>
       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
         <Avatar who="bara" size={56} /><span style={{ color: "var(--p)", fontSize: 22 }}>♥</span><Avatar who="nyong" size={56} />
       </div>
