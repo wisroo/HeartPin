@@ -26,7 +26,6 @@ export default function ProfileScreen({ app, nav, settings }) {
             <div className="hpm-fp"><b>{totTrips}</b><span>여행</span></div>
             <div className="hpm-fp"><b>{totSpots}</b><span>스팟</span></div>
             <div className="hpm-fp"><b>{totPhotos}</b><span>사진</span></div>
-            <div className="hpm-fp"><b>5</b><span>도시</span></div>
           </div>
           <div className="hpm-menu">
             <button className="hpm-menurow" onClick={nav.openCouple}><span className="ic"><Ico.heart width="18" height="18" /></span><span className="lb">캐릭터 · 커플 정보</span><span className="ch">›</span></button>

@@ -33,7 +33,7 @@ export default function CoupleScreen({ nav, settings }) {
         <div className="hpm-set-sec">기념일</div>
         <div className="hpm-menu">
           <div className="hpm-set-row"><div className="lb"><b>처음 만난 날</b><small>홈·프로필의 D-day 기준</small></div>
-            <input type="date" className="hpm-cinput date" value={settings.anniv || "2025-05-13"} onChange={(e) => nav.setSettings({ anniv: e.target.value })} /></div>
+            <input type="date" className="hpm-cinput date" value={settings.anniv || ""} onChange={(e) => nav.setSettings({ anniv: e.target.value })} /></div>
         </div>
 
         <div className="hpm-set-sec">내 캐릭터</div>
