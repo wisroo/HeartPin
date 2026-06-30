@@ -47,9 +47,9 @@ export default function JourneyPlayer({ trip, nav, settings }) {
       );
     });
     map.fitBounds(latlngs, { padding: [22, 22] });
-    setTimeout(() => { map.invalidateSize(); map.fitBounds(latlngs, { padding: [20, 20] }); }, 120);
-    setTimeout(() => { map.invalidateSize(); map.fitBounds(latlngs, { padding: [20, 20] }); }, 420);
-    return () => { map.remove(); mapRef.current = null; markersRef.current = []; };
+    const t1 = setTimeout(() => { map.invalidateSize(); map.fitBounds(latlngs, { padding: [20, 20] }); }, 120);
+    const t2 = setTimeout(() => { map.invalidateSize(); map.fitBounds(latlngs, { padding: [20, 20] }); }, 420);
+    return () => { clearTimeout(t1); clearTimeout(t2); map.remove(); mapRef.current = null; markersRef.current = []; };
     // eslint-disable-next-line
   }, []);
 
