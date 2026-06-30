@@ -186,7 +186,7 @@ function MapScreenInner({ trip, spots, initialIdx, nav, settings }) {
                     <Photo photo={s.photos?.[0]} cap={false} />
                     <div>
                       <div className="nm">{s.name}</div>
-                      <div className="mt">{s.dayLabel} · {s.time} · {s.photos.length}컷</div>
+                      <div className="mt">{s.dayLabel} · {s.time} · {(s.photos?.length ?? 0)}컷</div>
                     </div>
                   </button>
                 </div>
@@ -203,7 +203,7 @@ function MapScreenInner({ trip, spots, initialIdx, nav, settings }) {
                       <div className="hpm-railcard-name">{s.name}</div>
                       <div className="hpm-railcard-row">
                         <span className="hpm-chip sm">{s.time}</span>
-                        <span className="hpm-chip sm cool">{s.photos.length}컷</span>
+                        <span className="hpm-chip sm cool">{(s.photos?.length ?? 0)}컷</span>
                       </div>
                     </div>
                   </button>
