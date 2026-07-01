@@ -570,7 +570,7 @@ h1,h2,h3{font-family:var(--fd);font-weight:400;letter-spacing:.01em;}
 
 /* scoped resets (adapted: scoped under .hpm to avoid affecting desktop web app) */
 .hpm *{box-sizing:border-box;}
-.hpm button{font-family:inherit;cursor:pointer;border:none;background:none;}
+.hpm :where(button){font-family:inherit;cursor:pointer;border:none;background:none;}
 
 /* ============ app screen (adapted: border-radius:0, no var(--scr) bezel reference) ============ */
 .hpm-screen{
@@ -587,9 +587,9 @@ h1,h2,h3{font-family:var(--fd);font-weight:400;letter-spacing:.01em;}
 .hpm-pad{padding:6px 18px 22px;}
 
 /* app top bar */
-.hpm-top{flex:none;display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 4px) 18px 10px;}
+.hpm-top{flex:none;display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 12px) 18px 10px;}
 .hpm-top .mk{width:26px;height:26px;flex:none;border-radius:60% 40% 55% 45% / 50% 55% 45% 50%;background:linear-gradient(150deg,var(--p),var(--pd));position:relative;box-shadow:0 3px 8px color-mix(in srgb,var(--p) 45%,transparent);}
-.hpm-top .mk::after{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-7deg);width:14px;height:14px;background:var(--card);clip-path:path("M7 13.5C2.2 9.6 0 6.8 0 4 0 1.8 1.7 0 3.8 0 5.2 0 6.4.9 7 2.1 7.6.9 8.8 0 10.2 0 12.3 0 14 1.8 14 4c0 2.8-2.2 5.6-7 9.5Z");}
+.hpm-top .mk::after{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-7deg) scale(0.8);width:14px;height:14px;background:var(--card);clip-path:path("M7 13.5C2.2 9.6 0 6.8 0 4 0 1.8 1.7 0 3.8 0 5.2 0 6.4.9 7 2.1 7.6.9 8.8 0 10.2 0 12.3 0 14 1.8 14 4c0 2.8-2.2 5.6-7 9.5Z");}
 .hpm-top .ttl{font-family:var(--fd);font-size:24px;line-height:1;flex:1;color:var(--ink);}
 .hpm-top .ic{width:36px;height:36px;flex:none;border:1.5px solid var(--line2);background:var(--card);border-radius:11px;display:flex;align-items:center;justify-content:center;color:var(--ink2);box-shadow:0 2px 0 var(--line2);transition:transform .08s,box-shadow .08s;}
 .hpm-top .ic:active{transform:translateY(2px);box-shadow:0 0 0 var(--line2);}
