@@ -15,5 +15,5 @@ export default function MobileApp({ app }) {
   else if (auth.needsLogin) view = <LoginScreen onSignIn={auth.signIn} settings={settings} />;
   else if (!settings.myChar) view = <PickSide settings={settings} onPick={(who) => setSettings({ myChar: who })} />;
   else view = <MobileShell app={app} settings={settings} setSettings={setSettings} />;
-  return <div className="hpm" data-theme={settings.theme} style={{ height: "100%" }}>{view}</div>;
+  return <div className="hpm" data-theme={settings.theme} style={{ height: "100dvh" }}>{view}</div>;
 }
