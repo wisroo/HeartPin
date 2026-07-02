@@ -33,6 +33,8 @@ function MapScreenInner({ trip, spots, initialIdx, nav, settings }) {
   const charRef = useRef(null);
   const railRef = useRef(null);
   const dragRef = useRef(null);
+  const dragHRef = useRef(null);
+  const movedRef = useRef(false);
   const skin = settings.mapSkin || "cozy";
 
   function pinHtml(sp, i, isActive) {
@@ -116,8 +118,9 @@ function MapScreenInner({ trip, spots, initialIdx, nav, settings }) {
 
   function startDrag(e) {
     const y0 = e.touches ? e.touches[0].clientY : e.clientY;
-    const h0 = curHeightPx();
-    dragRef.current = { y0, h0 };
+    dragRef.current = { y0, h0: curHeightPx() };
+    dragHRef.current = null;
+    movedRef.current = false;
     window.addEventListener("pointermove", moveDrag);
     window.addEventListener("pointerup", endDrag);
   }
@@ -125,17 +128,20 @@ function MapScreenInner({ trip, spots, initialIdx, nav, settings }) {
   function moveDrag(e) {
     if (!dragRef.current) return;
     const dy = dragRef.current.y0 - e.clientY;
+    if (Math.abs(dy) > 4) movedRef.current = true;
     const total = screenH();
     let h = dragRef.current.h0 + dy;
     h = Math.max(total * 0.12, Math.min(total * 0.92, h));
+    dragHRef.current = h;
     setDragH(h);
   }
 
   function endDrag() {
     window.removeEventListener("pointermove", moveDrag);
     window.removeEventListener("pointerup", endDrag);
-    if (dragH != null) {
-      const frac = dragH / screenH();
+    const h = dragHRef.current; // live drag height (ref, not stale state)
+    if (h != null) {
+      const frac = h / screenH();
       const nearest = Object.entries(SNAP).reduce(
         (a, [k, v]) => Math.abs(v - frac) < Math.abs(SNAP[a] - frac) ? k : a,
         "half"
@@ -143,10 +149,12 @@ function MapScreenInner({ trip, spots, initialIdx, nav, settings }) {
       setSnap(nearest);
     }
     setDragH(null);
+    dragHRef.current = null;
     dragRef.current = null;
   }
 
   function cycleSnap() {
+    if (movedRef.current) { movedRef.current = false; return; } // a drag, not a tap
     setSnap(s => s === "peek" ? "half" : s === "half" ? "full" : "peek");
   }
 
