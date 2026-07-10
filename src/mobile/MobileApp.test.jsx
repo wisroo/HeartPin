@@ -25,3 +25,16 @@ test("supabase + needsLogin shows LOGIN after splash", () => {
   expect(screen.getByText("LOGIN")).toBeInTheDocument();
   vi.useRealTimers();
 });
+
+test("loaded supabase state skips duplicate mobile login gate", () => {
+  vi.spyOn(authMod, "useAuth").mockImplementation((opts = {}) => ({
+    needsLogin: !opts.hasLoadedState,
+    signIn: vi.fn(),
+    signOut: vi.fn(),
+  }));
+  vi.useFakeTimers();
+  render(<MobileApp app={{ data: {}, regions: { domestic: { trips: [] }, intl: { trips: [] } }, inboxItems: [] }} />);
+  act(() => vi.advanceTimersByTime(1500));
+  expect(screen.getByText("PICK")).toBeInTheDocument();
+  vi.useRealTimers();
+});

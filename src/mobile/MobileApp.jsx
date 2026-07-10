@@ -9,7 +9,7 @@ import MobileShell from "./MobileShell.jsx";
 export default function MobileApp({ app }) {
   const [splashDone, setSplashDone] = useState(false);
   const [settings, setSettings] = useMobileSettings();
-  const auth = useAuth();
+  const auth = useAuth({ hasLoadedState: !!app.data });
   let view;
   if (!splashDone) view = <LaunchSplash settings={settings} onDone={() => setSplashDone(true)} />;
   else if (auth.needsLogin) view = <LoginScreen onSignIn={auth.signIn} settings={settings} />;

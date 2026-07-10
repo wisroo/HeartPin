@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import * as api from "../api.js";
 
-export function useAuth() {
+export function useAuth({ hasLoadedState = false } = {}) {
   const [signedIn, setSignedIn] = useState(false);
   const supabase = api.getApiMode() === "supabase";
   const signIn = useCallback(async (email, password) => {
@@ -10,5 +10,5 @@ export function useAuth() {
     setSignedIn(true);
   }, []);
   const signOut = useCallback(() => setSignedIn(false), []);
-  return { needsLogin: supabase && !signedIn, signIn, signOut };
+  return { needsLogin: supabase && !hasLoadedState && !signedIn, signIn, signOut };
 }
