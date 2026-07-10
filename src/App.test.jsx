@@ -98,4 +98,25 @@ describe("App", () => {
       expect(api.signInToSupabase).toHaveBeenCalledWith("heartpin@example.com", "secret-password");
     });
   });
+
+  it("renders the mobile login screen when a Supabase session is required", async () => {
+    useResponsiveMode.mockReturnValue("mobile");
+    api.getApiMode.mockReturnValue("supabase");
+    useHeartPinState.mockReturnValue({
+      ...appState,
+      data: null,
+      loadError: "Supabase 로그인이 필요해요",
+    });
+
+    render(<App />);
+
+    expect(screen.getByRole("heading", { name: "HeartPin 로그인" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("이메일"), { target: { value: "heartpin@example.com" } });
+    fireEvent.change(screen.getByLabelText("비밀번호"), { target: { value: "secret-password" } });
+    fireEvent.click(screen.getByRole("button", { name: "로그인" }));
+
+    await waitFor(() => {
+      expect(api.signInToSupabase).toHaveBeenCalledWith("heartpin@example.com", "secret-password");
+    });
+  });
 });

@@ -8,7 +8,14 @@ import Inbox from "./components/Inbox.jsx";
 import Upload from "./components/Upload.jsx";
 import TripPreview from "./components/TripPreview.jsx";
 import MobileApp from "./mobile/MobileApp.jsx";
+import LoginScreen from "./mobile/onboarding/LoginScreen.jsx";
+import { useMobileSettings } from "./mobile/useMobileSettings.js";
 import WebApp from "./web/WebApp.jsx";
+
+async function signInAndReload(email, password) {
+  await api.signInToSupabase(email, password);
+  if (import.meta.env.MODE !== "test") window.location.reload();
+}
 
 function SupabaseLogin({ message }) {
   const [email, setEmail] = useState("");
@@ -21,8 +28,7 @@ function SupabaseLogin({ message }) {
     setBusy(true);
     setError(null);
     try {
-      await api.signInToSupabase(email.trim(), password);
-      if (import.meta.env.MODE !== "test") window.location.reload();
+      await signInAndReload(email.trim(), password);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -50,13 +56,22 @@ function SupabaseLogin({ message }) {
   );
 }
 
+function MobileSupabaseLogin() {
+  const [settings] = useMobileSettings();
+  return (
+    <div className="hpm" data-theme={settings.theme} style={{ height: "100dvh" }}>
+      <LoginScreen onSignIn={signInAndReload} settings={settings} />
+    </div>
+  );
+}
+
 export default function App() {
   const mode = useResponsiveMode();
   const app = useHeartPinState();
 
   if (app.loadError) {
     if (api.getApiMode() === "supabase" && app.loadError.includes("Supabase 로그인이 필요")) {
-      return <SupabaseLogin message={app.loadError} />;
+      return mode === "mobile" ? <MobileSupabaseLogin /> : <SupabaseLogin message={app.loadError} />;
     }
     return (
       <div className="hp-app hp-boot">
