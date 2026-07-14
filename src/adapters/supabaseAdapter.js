@@ -6,7 +6,10 @@ const SIGNED_URL_SECONDS = 60 * 60;
 function emptyState() {
   return {
     version: 1,
-    regions: { domestic: { trips: [] }, intl: { trips: [] } },
+    regions: {
+      domestic: { key: "domestic", label: "국내", trips: [] },
+      intl: { key: "intl", label: "국외", trips: [] },
+    },
     inbox: [],
   };
 }
@@ -74,6 +77,162 @@ function assertSupabaseOk(result, message) {
   return result.data;
 }
 
+function sortRows(rows) {
+  return [...rows].sort((a, b) => (
+    (a.sort_order ?? 0) - (b.sort_order ?? 0)
+    || String(a.created_at || "").localeCompare(String(b.created_at || ""))
+    || String(a.id || "").localeCompare(String(b.id || ""))
+  ));
+}
+
+function rowVersion(rows) {
+  return rows.reduce((max, row) => {
+    const time = Date.parse(row.updated_at || row.created_at || "");
+    return Number.isNaN(time) ? max : Math.max(max, time);
+  }, 1);
+}
+
+async function fetchOrderedTable(client, table) {
+  return assertSupabaseOk(
+    await client.from(table).select("*").order("sort_order", { ascending: true }).order("created_at", { ascending: true }),
+    `Supabase ${table} 조회 실패`,
+  ) || [];
+}
+
+async function fetchCreatedTable(client, table) {
+  return assertSupabaseOk(
+    await client.from(table).select("*").order("created_at", { ascending: true }),
+    `Supabase ${table} 조회 실패`,
+  ) || [];
+}
+
+async function createPathSigner(client) {
+  const storage = client.storage.from(PHOTOS_BUCKET);
+  const cache = new Map();
+  return async function signedUrl(path) {
+    if (!path) return "";
+    if (cache.has(path)) return cache.get(path);
+    const signed = assertSupabaseOk(
+      await storage.createSignedUrl(path, SIGNED_URL_SECONDS),
+      "Supabase signed URL 생성 실패",
+    );
+    cache.set(path, signed.signedUrl);
+    return signed.signedUrl;
+  };
+}
+
+async function momentToPhoto(row, signedUrl) {
+  return {
+    id: row.id,
+    src: await signedUrl(row.display_path),
+    thumb: await signedUrl(row.thumb_path),
+    label: row.label,
+    ratio: row.ratio || "4/3",
+    tint: row.tint,
+    content_hash: row.content_hash,
+    owner: row.owner,
+    taken_at: row.taken_at,
+    lat: row.lat,
+    lng: row.lng,
+    original_status: row.original_status || "kept",
+  };
+}
+
+async function inboxRowToItem(row, signedUrl) {
+  return {
+    id: row.id,
+    kind: row.kind,
+    date: row.date,
+    time: row.time,
+    takenAt: row.taken_at,
+    taken_at: row.taken_at,
+    lat: row.lat,
+    lng: row.lng,
+    src: await signedUrl(row.display_path),
+    thumb: await signedUrl(row.thumb_path),
+    label: row.label,
+    autoLabel: row.auto_label || row.label || row.original_name || "사진",
+    ratio: row.ratio || "4/3",
+    tint: row.tint,
+    blur: row.blur,
+    content_hash: row.content_hash,
+    original_name: row.original_name,
+    original_size: row.original_size,
+    owner: row.owner,
+    original_status: row.original_status || "kept",
+  };
+}
+
+async function assembleState(client, rows) {
+  const state = emptyState();
+  const signedUrl = await createPathSigner(client);
+  const daysByTrip = new Map();
+  const spotsByDay = new Map();
+  const photosBySpot = new Map();
+
+  sortRows(rows.days).forEach((day) => {
+    const list = daysByTrip.get(day.trip_id) || [];
+    list.push(day);
+    daysByTrip.set(day.trip_id, list);
+  });
+
+  sortRows(rows.spots).forEach((spot) => {
+    const list = spotsByDay.get(spot.day_id) || [];
+    list.push(spot);
+    spotsByDay.set(spot.day_id, list);
+  });
+
+  for (const moment of sortRows(rows.moments)) {
+    const list = photosBySpot.get(moment.spot_id) || [];
+    list.push(await momentToPhoto(moment, signedUrl));
+    photosBySpot.set(moment.spot_id, list);
+  }
+
+  for (const tripRow of sortRows(rows.trips)) {
+    const days = (daysByTrip.get(tripRow.id) || []).map((dayRow) => ({
+      id: dayRow.id,
+      label: dayRow.label,
+      date: dayRow.date_label,
+      dateValue: dayRow.date_value,
+      spots: (spotsByDay.get(dayRow.id) || []).map((spotRow) => ({
+        id: spotRow.id,
+        name: spotRow.name,
+        time: spotRow.time,
+        lat: spotRow.lat,
+        lng: spotRow.lng,
+        mood: spotRow.mood,
+        guide: spotRow.guide,
+        reaction: spotRow.reaction,
+        photos: photosBySpot.get(spotRow.id) || [],
+      })),
+    }));
+    const firstPhoto = days.flatMap((day) => day.spots).find((spot) => spot.photos.length)?.photos[0] || null;
+    state.regions[tripRow.region].trips.push({
+      id: tripRow.id,
+      region: tripRow.region,
+      start: tripRow.start_date,
+      title: tripRow.title,
+      dateLabel: tripRow.date_label,
+      cover: firstPhoto,
+      tags: tripRow.tags || [],
+      days,
+    });
+  }
+
+  for (const row of sortRows(rows.inboxItems)) {
+    state.inbox.push(await inboxRowToItem(row, signedUrl));
+  }
+
+  state.version = Math.max(
+    rowVersion(rows.trips),
+    rowVersion(rows.days),
+    rowVersion(rows.spots),
+    rowVersion(rows.moments),
+    rowVersion(rows.inboxItems),
+  );
+  return state;
+}
+
 export function createSupabaseAdapter({ client = createSupabaseClient() } = {}) {
   return {
     async signIn(email, password) {
@@ -83,11 +242,20 @@ export function createSupabaseAdapter({ client = createSupabaseClient() } = {}) 
       );
     },
 
-    async fetchState() {
+    async fetchState(since) {
       const sessionResult = await client.auth.getSession();
       const session = assertSupabaseOk(sessionResult, "Supabase 세션 확인 실패")?.session;
       if (!session?.user) throw new Error("Supabase 로그인이 필요해요");
-      return emptyState();
+      const [trips, days, spots, moments, inboxItems] = await Promise.all([
+        fetchOrderedTable(client, "trips"),
+        fetchOrderedTable(client, "days"),
+        fetchOrderedTable(client, "spots"),
+        fetchOrderedTable(client, "moments"),
+        fetchCreatedTable(client, "inbox_items"),
+      ]);
+      const state = await assembleState(client, { trips, days, spots, moments, inboxItems });
+      if (since != null && state.version <= since) return { unchanged: true };
+      return state;
     },
 
     async uploadPhotos(items, owner, onProgress) {

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildTestOriginalPath, createSupabaseAdapter } from "./supabaseAdapter.js";
 
-function makeClient({ user = { id: "user-123" }, uploadError = null, insertError = null } = {}) {
+function makeUploadClient({ user = { id: "user-123" }, uploadError = null, insertError = null } = {}) {
   const upload = vi.fn().mockResolvedValue({ data: { path: "uploaded" }, error: uploadError });
   const createSignedUrl = vi.fn().mockResolvedValue({ data: { signedUrl: "https://signed.example/photo.jpg" }, error: null });
   const insert = vi.fn().mockResolvedValue({ data: null, error: insertError });
@@ -14,6 +14,36 @@ function makeClient({ user = { id: "user-123" }, uploadError = null, insertError
     },
     from: vi.fn().mockReturnValue({ insert }),
     spies: { upload, createSignedUrl, insert },
+  };
+}
+
+function makeFetchClient({ user = { id: "user-123" }, rows = {} } = {}) {
+  const createSignedUrl = vi.fn((path) => Promise.resolve({
+    data: { signedUrl: `https://signed.example/${path}` },
+    error: null,
+  }));
+  const queries = [];
+
+  return {
+    auth: {
+      getSession: vi.fn().mockResolvedValue({ data: { session: user ? { user } : null }, error: null }),
+    },
+    storage: {
+      from: vi.fn().mockReturnValue({ createSignedUrl }),
+    },
+    from: vi.fn((table) => {
+      const query = {
+        select: vi.fn(() => query),
+        order: vi.fn(() => query),
+        insert: vi.fn(),
+        then(resolve, reject) {
+          return Promise.resolve({ data: rows[table] || [], error: null }).then(resolve, reject);
+        },
+      };
+      queries.push({ table, query });
+      return query;
+    }),
+    spies: { createSignedUrl, queries },
   };
 }
 
@@ -32,6 +62,185 @@ describe("buildTestOriginalPath", () => {
   });
 });
 
+describe("supabaseAdapter.fetchState", () => {
+  it("assembles persisted trip, moment, and inbox rows into app state", async () => {
+    const client = makeFetchClient({
+      rows: {
+        trips: [
+          {
+            id: "trip-1",
+            region: "domestic",
+            title: "부산 기록",
+            start_date: "2026-07-10",
+            date_label: "2026.07.10 – 07.11",
+            cover: null,
+            tags: ["국내", "바다"],
+            sort_order: 1,
+            created_at: "2026-07-12T00:00:00Z",
+            updated_at: "2026-07-12T00:00:00Z",
+          },
+        ],
+        days: [
+          {
+            id: "day-1",
+            trip_id: "trip-1",
+            label: "Day 1",
+            date_label: "07.10 금",
+            date_value: "2026-07-10",
+            sort_order: 1,
+            created_at: "2026-07-12T00:01:00Z",
+            updated_at: "2026-07-12T00:01:00Z",
+          },
+        ],
+        spots: [
+          {
+            id: "spot-1",
+            day_id: "day-1",
+            name: "해운대",
+            time: "11:40",
+            lat: 35.1587,
+            lng: 129.1604,
+            mood: "바다",
+            guide: "여기서 하루를 열었지.",
+            reaction: "파도 좋다!",
+            sort_order: 1,
+            created_at: "2026-07-12T00:02:00Z",
+            updated_at: "2026-07-12T00:02:00Z",
+          },
+        ],
+        moments: [
+          {
+            id: "moment-1",
+            spot_id: "spot-1",
+            display_path: "display/trip-1/moment-1.webp",
+            thumb_path: "thumb/trip-1/moment-1.webp",
+            label: "해운대 산책",
+            ratio: "4/3",
+            tint: "cool",
+            content_hash: "hash-1",
+            original_name: "beach.jpg",
+            original_size: 1234,
+            taken_at: "2026-07-10T11:40:00Z",
+            lat: 35.1587,
+            lng: 129.1604,
+            owner: "bara",
+            original_status: "kept",
+            sort_order: 1,
+            created_at: "2026-07-12T00:03:00Z",
+            updated_at: "2026-07-12T00:03:00Z",
+          },
+        ],
+        inbox_items: [
+          {
+            id: "inbox-1",
+            kind: "noloc",
+            date: "2026-07-11",
+            time: "20:30",
+            taken_at: "2026-07-11T20:30:00Z",
+            lat: null,
+            lng: null,
+            display_path: "display/inbox/inbox-1.webp",
+            thumb_path: "thumb/inbox/inbox-1.webp",
+            label: "저녁 사진",
+            auto_label: "저녁 사진",
+            ratio: "1/1",
+            tint: "warm",
+            blur: false,
+            content_hash: "hash-inbox",
+            original_name: "dinner.jpg",
+            original_size: 4321,
+            owner: "nyong",
+            original_status: "kept",
+            created_at: "2026-07-12T00:04:00Z",
+            updated_at: "2026-07-12T00:04:00Z",
+          },
+        ],
+      },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    const state = await adapter.fetchState();
+
+    expect(client.from).toHaveBeenCalledWith("trips");
+    expect(client.from).toHaveBeenCalledWith("days");
+    expect(client.from).toHaveBeenCalledWith("spots");
+    expect(client.from).toHaveBeenCalledWith("moments");
+    expect(client.from).toHaveBeenCalledWith("inbox_items");
+    expect(client.storage.from).toHaveBeenCalledWith("photos");
+    expect(state.version).toBe(Date.parse("2026-07-12T00:04:00Z"));
+    expect(state.regions.domestic.trips).toEqual([{
+      id: "trip-1",
+      region: "domestic",
+      start: "2026-07-10",
+      title: "부산 기록",
+      dateLabel: "2026.07.10 – 07.11",
+      cover: expect.objectContaining({
+        id: "moment-1",
+        src: "https://signed.example/display/trip-1/moment-1.webp",
+        thumb: "https://signed.example/thumb/trip-1/moment-1.webp",
+      }),
+      tags: ["국내", "바다"],
+      days: [{
+        id: "day-1",
+        label: "Day 1",
+        date: "07.10 금",
+        dateValue: "2026-07-10",
+        spots: [{
+          id: "spot-1",
+          name: "해운대",
+          time: "11:40",
+          lat: 35.1587,
+          lng: 129.1604,
+          mood: "바다",
+          guide: "여기서 하루를 열었지.",
+          reaction: "파도 좋다!",
+          photos: [expect.objectContaining({
+            id: "moment-1",
+            label: "해운대 산책",
+            src: "https://signed.example/display/trip-1/moment-1.webp",
+            thumb: "https://signed.example/thumb/trip-1/moment-1.webp",
+            content_hash: "hash-1",
+            owner: "bara",
+            original_status: "kept",
+          })],
+        }],
+      }],
+    }]);
+    expect(state.regions.intl.trips).toEqual([]);
+    expect(state.inbox).toEqual([expect.objectContaining({
+      id: "inbox-1",
+      kind: "noloc",
+      date: "2026-07-11",
+      time: "20:30",
+      src: "https://signed.example/display/inbox/inbox-1.webp",
+      thumb: "https://signed.example/thumb/inbox/inbox-1.webp",
+      autoLabel: "저녁 사진",
+      owner: "nyong",
+    })]);
+  });
+
+  it("returns unchanged when the persisted version is not newer than since", async () => {
+    const client = makeFetchClient({
+      rows: {
+        trips: [{
+          id: "trip-1",
+          region: "domestic",
+          title: "부산 기록",
+          start_date: "2026-07-10",
+          date_label: "2026.07.10",
+          tags: [],
+          updated_at: "2026-07-12T00:00:00Z",
+        }],
+      },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(adapter.fetchState(Date.parse("2026-07-12T00:00:00Z"))).resolves.toEqual({
+      unchanged: true,
+    });
+  });
+});
+
 describe("supabaseAdapter.uploadPhotos", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -39,14 +248,14 @@ describe("supabaseAdapter.uploadPhotos", () => {
   });
 
   it("requires a signed-in Supabase user", async () => {
-    const client = makeClient({ user: null });
+    const client = makeUploadClient({ user: null });
     const adapter = createSupabaseAdapter({ client });
 
     await expect(adapter.uploadPhotos([], "bara")).rejects.toThrow("Supabase 로그인이 필요해요");
   });
 
   it("uploads temporary originals and records GPS metadata", async () => {
-    const client = makeClient();
+    const client = makeUploadClient();
     const adapter = createSupabaseAdapter({ client });
     const onProgress = vi.fn();
     const bytes = new Uint8Array([1, 2, 3]);
