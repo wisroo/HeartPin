@@ -25,6 +25,7 @@ function makeFetchClient({ user = { id: "user-123" }, rows = {} } = {}) {
   const queries = [];
   const updates = [];
   const deletes = [];
+  const inserts = [];
 
   return {
     auth: {
@@ -35,10 +36,15 @@ function makeFetchClient({ user = { id: "user-123" }, rows = {} } = {}) {
     },
     from: vi.fn((table) => {
       const filters = [];
+      const inFilters = [];
       const query = {
         select: vi.fn(() => query),
         eq: vi.fn((column, value) => {
           filters.push({ column, value });
+          return query;
+        }),
+        in: vi.fn((column, value) => {
+          inFilters.push({ column, value });
           return query;
         }),
         single: vi.fn(() => {
@@ -48,7 +54,10 @@ function makeFetchClient({ user = { id: "user-123" }, rows = {} } = {}) {
           return Promise.resolve({ data: row || null, error: null });
         }),
         order: vi.fn(() => query),
-        insert: vi.fn(),
+        insert: vi.fn((payload) => {
+          inserts.push({ table, payload });
+          return Promise.resolve({ data: null, error: null });
+        }),
         update: vi.fn((payload) => ({
           eq: vi.fn((column, value) => {
             updates.push({ table, payload, column, value });
@@ -66,13 +75,20 @@ function makeFetchClient({ user = { id: "user-123" }, rows = {} } = {}) {
           }),
         })),
         then(resolve, reject) {
-          return Promise.resolve({ data: rows[table] || [], error: null }).then(resolve, reject);
+          let data = rows[table] || [];
+          filters.forEach((filter) => {
+            data = data.filter((row) => row[filter.column] === filter.value);
+          });
+          inFilters.forEach((filter) => {
+            data = data.filter((row) => filter.value.includes(row[filter.column]));
+          });
+          return Promise.resolve({ data, error: null }).then(resolve, reject);
         },
       };
       queries.push({ table, query });
       return query;
     }),
-    spies: { createSignedUrl, queries, updates, deletes },
+    spies: { createSignedUrl, queries, updates, deletes, inserts },
   };
 }
 
@@ -432,6 +448,71 @@ describe("supabaseAdapter inbox edits", () => {
       table: "inbox_items",
       column: "id",
       value: ["inbox-1", "inbox-2"],
+    });
+  });
+});
+
+describe("supabaseAdapter.placePhotos", () => {
+  it("moves inbox items into existing spot moments", async () => {
+    const client = makeFetchClient({
+      rows: {
+        inbox_items: [{
+          id: "inbox-1",
+          kind: "unsorted",
+          date: "2026-07-11",
+          time: "20:30",
+          taken_at: "2026-07-11T20:30:00Z",
+          lat: 37.5,
+          lng: 127.0,
+          display_path: "display/inbox/inbox-1.webp",
+          thumb_path: "thumb/inbox/inbox-1.webp",
+          label: "원래 라벨",
+          auto_label: "자동 라벨",
+          ratio: "4/3",
+          tint: "cool",
+          content_hash: "hash-inbox",
+          original_name: "photo.jpg",
+          original_size: 1234,
+          owner: "bara",
+          original_status: "kept",
+          updated_at: "2026-07-12T00:00:00Z",
+        }],
+      },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await adapter.placePhotos([{
+      itemId: "inbox-1",
+      tripId: "trip-1",
+      spotId: "spot-1",
+      memo: "사용자 메모",
+      lat: 37.6,
+      lng: 127.1,
+    }]);
+
+    expect(client.spies.inserts[0]).toEqual({
+      table: "moments",
+      payload: [expect.objectContaining({
+        spot_id: "spot-1",
+        display_path: "display/inbox/inbox-1.webp",
+        thumb_path: "thumb/inbox/inbox-1.webp",
+        label: "사용자 메모",
+        ratio: "4/3",
+        tint: "cool",
+        content_hash: "hash-inbox",
+        original_name: "photo.jpg",
+        original_size: 1234,
+        taken_at: "2026-07-11T20:30:00Z",
+        lat: 37.6,
+        lng: 127.1,
+        owner: "bara",
+        original_status: "kept",
+      })],
+    });
+    expect(client.spies.deletes[0]).toEqual({
+      table: "inbox_items",
+      column: "id",
+      value: ["inbox-1"],
     });
   });
 });

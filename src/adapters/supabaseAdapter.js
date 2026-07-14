@@ -105,6 +105,22 @@ function normalizeIds(ids) {
   return Array.isArray(ids) ? ids : [ids];
 }
 
+async function insertRows(client, table, rows, message) {
+  if (!rows.length) return;
+  assertSupabaseOk(
+    await client.from(table).insert(rows),
+    message,
+  );
+}
+
+async function fetchInboxItemsByIds(client, ids) {
+  if (!ids.length) return [];
+  return assertSupabaseOk(
+    await client.from("inbox_items").select("*").in("id", ids),
+    "Supabase 정리함 항목 조회 실패",
+  ) || [];
+}
+
 function sortRows(rows) {
   return [...rows].sort((a, b) => (
     (a.sort_order ?? 0) - (b.sort_order ?? 0)
@@ -359,7 +375,40 @@ export function createSupabaseAdapter({ client = createSupabaseClient() } = {}) 
       };
     },
 
-    async placePhotos() { return emptyState(); },
+    async placePhotos(rows) {
+      const existingSpotRows = rows.filter((row) => row.spotId && row.spotId !== "__new__" && row.itemId);
+      const itemIds = existingSpotRows.map((row) => row.itemId);
+      const itemsById = new Map((await fetchInboxItemsByIds(client, itemIds)).map((item) => [item.id, item]));
+      const placedIds = [];
+      const moments = [];
+
+      existingSpotRows.forEach((row, index) => {
+        const item = itemsById.get(row.itemId);
+        if (!item) return;
+        moments.push({
+          spot_id: row.spotId,
+          display_path: item.display_path,
+          thumb_path: item.thumb_path,
+          label: row.memo || item.auto_label || item.label,
+          ratio: item.ratio || "4/3",
+          tint: item.tint,
+          content_hash: item.content_hash,
+          original_name: item.original_name,
+          original_size: item.original_size,
+          taken_at: item.taken_at,
+          lat: row.lat ?? item.lat,
+          lng: row.lng ?? item.lng,
+          owner: item.owner,
+          original_status: "kept",
+          sort_order: index,
+        });
+        placedIds.push(item.id);
+      });
+
+      await insertRows(client, "moments", moments, "Supabase 모먼트 추가 실패");
+      await deleteByIds(client, "inbox_items", placedIds, "Supabase 배치된 정리함 항목 삭제 실패");
+      return this.fetchState();
+    },
     async addTrip() { return emptyState(); },
     async editTrip(tripId, text) {
       await updateById(client, "trips", tripId, { title: text }, "Supabase 여행 수정 실패");
