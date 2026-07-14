@@ -2,6 +2,7 @@ import { createSupabaseClient } from "./supabaseClient.js";
 
 const PHOTOS_BUCKET = "photos";
 const SIGNED_URL_SECONDS = 60 * 60;
+const EDITABLE_SPOT_FIELDS = new Set(["name", "time", "mood", "guide", "reaction"]);
 
 function emptyState() {
   return {
@@ -75,6 +76,13 @@ function dateParts(takenAt) {
 function assertSupabaseOk(result, message) {
   if (result.error) throw new Error(`${message}: ${result.error.message}`);
   return result.data;
+}
+
+async function updateById(client, table, id, patch, message) {
+  assertSupabaseOk(
+    await client.from(table).update(patch).eq("id", id),
+    message,
+  );
 }
 
 function sortRows(rows) {
@@ -332,8 +340,16 @@ export function createSupabaseAdapter({ client = createSupabaseClient() } = {}) 
 
     async placePhotos() { return emptyState(); },
     async addTrip() { return emptyState(); },
-    async editTrip() { return emptyState(); },
-    async editSpot() { return emptyState(); },
+    async editTrip(tripId, text) {
+      await updateById(client, "trips", tripId, { title: text }, "Supabase 여행 수정 실패");
+      return this.fetchState();
+    },
+
+    async editSpot(spotId, field, text) {
+      if (!EDITABLE_SPOT_FIELDS.has(field)) throw new Error("수정할 수 없는 Spot 필드예요");
+      await updateById(client, "spots", spotId, { [field]: text }, "Supabase Spot 수정 실패");
+      return this.fetchState();
+    },
     async inboxKeep() { return emptyState(); },
     async inboxDiscard() { return emptyState(); },
     async inboxPurge() { return emptyState(); },

@@ -23,6 +23,7 @@ function makeFetchClient({ user = { id: "user-123" }, rows = {} } = {}) {
     error: null,
   }));
   const queries = [];
+  const updates = [];
 
   return {
     auth: {
@@ -36,6 +37,12 @@ function makeFetchClient({ user = { id: "user-123" }, rows = {} } = {}) {
         select: vi.fn(() => query),
         order: vi.fn(() => query),
         insert: vi.fn(),
+        update: vi.fn((payload) => ({
+          eq: vi.fn((column, value) => {
+            updates.push({ table, payload, column, value });
+            return Promise.resolve({ data: null, error: null });
+          }),
+        })),
         then(resolve, reject) {
           return Promise.resolve({ data: rows[table] || [], error: null }).then(resolve, reject);
         },
@@ -43,7 +50,7 @@ function makeFetchClient({ user = { id: "user-123" }, rows = {} } = {}) {
       queries.push({ table, query });
       return query;
     }),
-    spies: { createSignedUrl, queries },
+    spies: { createSignedUrl, queries, updates },
   };
 }
 
@@ -238,6 +245,91 @@ describe("supabaseAdapter.fetchState", () => {
     await expect(adapter.fetchState(Date.parse("2026-07-12T00:00:00Z"))).resolves.toEqual({
       unchanged: true,
     });
+  });
+});
+
+describe("supabaseAdapter record edits", () => {
+  it("updates a trip title and returns refreshed state", async () => {
+    const client = makeFetchClient({
+      rows: {
+        trips: [{
+          id: "trip-1",
+          region: "domestic",
+          title: "새 부산 기록",
+          start_date: "2026-07-10",
+          date_label: "2026.07.10",
+          tags: [],
+          updated_at: "2026-07-12T00:00:00Z",
+        }],
+      },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    const state = await adapter.editTrip("trip-1", "새 부산 기록");
+
+    expect(client.spies.updates[0]).toEqual({
+      table: "trips",
+      payload: { title: "새 부산 기록" },
+      column: "id",
+      value: "trip-1",
+    });
+    expect(state.regions.domestic.trips[0].title).toBe("새 부산 기록");
+  });
+
+  it("updates an allowed spot field and returns refreshed state", async () => {
+    const client = makeFetchClient({
+      rows: {
+        trips: [{
+          id: "trip-1",
+          region: "domestic",
+          title: "부산 기록",
+          start_date: "2026-07-10",
+          date_label: "2026.07.10",
+          tags: [],
+          updated_at: "2026-07-12T00:00:00Z",
+        }],
+        days: [{
+          id: "day-1",
+          trip_id: "trip-1",
+          label: "Day 1",
+          date_label: "07.10 금",
+          sort_order: 1,
+          updated_at: "2026-07-12T00:01:00Z",
+        }],
+        spots: [{
+          id: "spot-1",
+          day_id: "day-1",
+          name: "해운대",
+          time: "11:40",
+          lat: 35.1587,
+          lng: 129.1604,
+          mood: "바다",
+          guide: "새 가이드",
+          reaction: "파도 좋다!",
+          sort_order: 1,
+          updated_at: "2026-07-12T00:02:00Z",
+        }],
+      },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    const state = await adapter.editSpot("spot-1", "guide", "새 가이드");
+
+    expect(client.spies.updates[0]).toEqual({
+      table: "spots",
+      payload: { guide: "새 가이드" },
+      column: "id",
+      value: "spot-1",
+    });
+    expect(state.regions.domestic.trips[0].days[0].spots[0].guide).toBe("새 가이드");
+  });
+
+  it("rejects unsupported spot fields before calling Supabase", async () => {
+    const client = makeFetchClient();
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(adapter.editSpot("spot-1", "owner", "nyong")).rejects.toThrow("수정할 수 없는 Spot 필드예요");
+    expect(client.spies.updates).toEqual([]);
   });
 });
 
