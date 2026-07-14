@@ -125,6 +125,14 @@ async function fetchInboxItemsByIds(client, ids) {
   ) || [];
 }
 
+async function fetchDaysForTrips(client, tripIds) {
+  if (!tripIds.length) return [];
+  return assertSupabaseOk(
+    await client.from("days").select("*").in("trip_id", tripIds),
+    "Supabase Day 조회 실패",
+  ) || [];
+}
+
 function tripRowsForInsert(trip) {
   return [{
     id: trip.id,
@@ -447,10 +455,16 @@ export function createSupabaseAdapter({ client = createSupabaseClient() } = {}) 
 
     async placePhotos(rows) {
       const existingSpotRows = rows.filter((row) => row.spotId && row.spotId !== "__new__" && row.itemId);
-      const itemIds = existingSpotRows.map((row) => row.itemId);
+      const newSpotRows = rows.filter((row) => row.spotId === "__new__" && row.itemId && row.tripId);
+      const itemIds = [...existingSpotRows, ...newSpotRows].map((row) => row.itemId);
       const itemsById = new Map((await fetchInboxItemsByIds(client, itemIds)).map((item) => [item.id, item]));
+      const daysByTripDate = new Map(
+        (await fetchDaysForTrips(client, [...new Set(newSpotRows.map((row) => row.tripId))]))
+          .map((day) => [`${day.trip_id}|${day.date_value}`, day]),
+      );
       const placedIds = [];
       const moments = [];
+      const newSpots = [];
 
       existingSpotRows.forEach((row, index) => {
         const item = itemsById.get(row.itemId);
@@ -475,6 +489,44 @@ export function createSupabaseAdapter({ client = createSupabaseClient() } = {}) 
         placedIds.push(item.id);
       });
 
+      newSpotRows.forEach((row, index) => {
+        const item = itemsById.get(row.itemId);
+        const day = item ? daysByTripDate.get(`${row.tripId}|${item.date}`) : null;
+        if (!item || !day) return;
+        const spotId = row.newSpotId || row.newKey || `spot-${item.id}`;
+        newSpots.push({
+          id: spotId,
+          day_id: day.id,
+          name: (row.newSpotName || "").trim() || "새 장소",
+          time: item.time || "12:00",
+          lat: row.lat ?? item.lat,
+          lng: row.lng ?? item.lng,
+          mood: "우리 기록",
+          guide: row.line?.guide || "여기서의 기록이야.",
+          reaction: row.line?.reaction || "좋다!",
+          sort_order: index,
+        });
+        moments.push({
+          spot_id: spotId,
+          display_path: item.display_path,
+          thumb_path: item.thumb_path,
+          label: row.memo || item.auto_label || item.label,
+          ratio: item.ratio || "4/3",
+          tint: item.tint,
+          content_hash: item.content_hash,
+          original_name: item.original_name,
+          original_size: item.original_size,
+          taken_at: item.taken_at,
+          lat: row.lat ?? item.lat,
+          lng: row.lng ?? item.lng,
+          owner: item.owner,
+          original_status: "kept",
+          sort_order: index,
+        });
+        placedIds.push(item.id);
+      });
+
+      await insertRows(client, "spots", newSpots, "Supabase Spot 추가 실패");
       await insertRows(client, "moments", moments, "Supabase 모먼트 추가 실패");
       await deleteByIds(client, "inbox_items", placedIds, "Supabase 배치된 정리함 항목 삭제 실패");
       return this.fetchState();

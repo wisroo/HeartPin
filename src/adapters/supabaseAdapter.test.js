@@ -515,6 +515,80 @@ describe("supabaseAdapter.placePhotos", () => {
       value: ["inbox-1"],
     });
   });
+
+  it("creates a new spot on the matching trip day before placing moments", async () => {
+    const client = makeFetchClient({
+      rows: {
+        days: [{
+          id: "day-1",
+          trip_id: "trip-1",
+          label: "Day 1",
+          date_label: "07.11 토",
+          date_value: "2026-07-11",
+          sort_order: 0,
+        }],
+        inbox_items: [{
+          id: "inbox-1",
+          kind: "unsorted",
+          date: "2026-07-11",
+          time: "20:30",
+          taken_at: "2026-07-11T20:30:00Z",
+          lat: 37.5,
+          lng: 127.0,
+          display_path: "display/inbox/inbox-1.webp",
+          thumb_path: "thumb/inbox/inbox-1.webp",
+          auto_label: "자동 라벨",
+          ratio: "4/3",
+          tint: "cool",
+          content_hash: "hash-inbox",
+          original_name: "photo.jpg",
+          original_size: 1234,
+          owner: "bara",
+          original_status: "kept",
+        }],
+      },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await adapter.placePhotos([{
+      itemId: "inbox-1",
+      tripId: "trip-1",
+      spotId: "__new__",
+      newSpotName: "새 장소",
+      memo: "사용자 메모",
+      line: { guide: "새 가이드", reaction: "새 반응" },
+    }]);
+
+    expect(client.spies.inserts[0]).toEqual({
+      table: "spots",
+      payload: [expect.objectContaining({
+        id: "spot-inbox-1",
+        day_id: "day-1",
+        name: "새 장소",
+        time: "20:30",
+        lat: 37.5,
+        lng: 127.0,
+        mood: "우리 기록",
+        guide: "새 가이드",
+        reaction: "새 반응",
+      })],
+    });
+    expect(client.spies.inserts[1]).toEqual({
+      table: "moments",
+      payload: [expect.objectContaining({
+        spot_id: "spot-inbox-1",
+        display_path: "display/inbox/inbox-1.webp",
+        thumb_path: "thumb/inbox/inbox-1.webp",
+        label: "사용자 메모",
+        content_hash: "hash-inbox",
+      })],
+    });
+    expect(client.spies.deletes[0]).toEqual({
+      table: "inbox_items",
+      column: "id",
+      value: ["inbox-1"],
+    });
+  });
 });
 
 describe("supabaseAdapter.addTrip", () => {
