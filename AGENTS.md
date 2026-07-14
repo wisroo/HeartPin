@@ -101,5 +101,10 @@ HeartPin에서 Codex가 작업할 때 따르는 프로젝트 운영 규칙이다
   - Codex 도구의 기본 `codex/` prefix는 이 프로젝트에서는 사용하지 않는다.
 - 관련 없는 변경을 함께 stage/commit하지 않는다.
 - 커밋 전에는 `git status --short`와 staged diff를 확인한다.
+- 커밋 메시지는 영어로 작성한다.
+  - 제목은 Conventional Commit 형식을 우선한다. 예: `feat: persist Supabase inbox actions`
+  - 제목은 명령형/현재형으로 짧게 쓰고, 변경 범위가 드러나게 한다.
+  - 본문은 사소한 변경을 제외하고 bullet list로 구체적인 변경 내용을 적는다.
+  - 본문에는 필요한 경우 검증 명령, 남은 리스크, 사용자 검증 필요 여부를 적는다.
 - pull이 필요하고 로컬 변경이 있으면 `git pull --rebase --autostash`를 선호한다.
 - destructive 명령(`git reset --hard`, 강제 삭제 등)은 명시 지시 없이 실행하지 않는다.
