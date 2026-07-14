@@ -85,6 +85,26 @@ async function updateById(client, table, id, patch, message) {
   );
 }
 
+async function updateByIds(client, table, ids, patch, message) {
+  if (!ids.length) return;
+  assertSupabaseOk(
+    await client.from(table).update(patch).in("id", ids),
+    message,
+  );
+}
+
+async function deleteByIds(client, table, ids, message) {
+  if (!ids.length) return;
+  assertSupabaseOk(
+    await client.from(table).delete().in("id", ids),
+    message,
+  );
+}
+
+function normalizeIds(ids) {
+  return Array.isArray(ids) ? ids : [ids];
+}
+
 function sortRows(rows) {
   return [...rows].sort((a, b) => (
     (a.sort_order ?? 0) - (b.sort_order ?? 0)
@@ -228,6 +248,7 @@ async function assembleState(client, rows) {
   }
 
   for (const row of sortRows(rows.inboxItems)) {
+    if (row.original_status === "discard_pending" || row.original_status === "discarded") continue;
     state.inbox.push(await inboxRowToItem(row, signedUrl));
   }
 
@@ -350,9 +371,38 @@ export function createSupabaseAdapter({ client = createSupabaseClient() } = {}) 
       await updateById(client, "spots", spotId, { [field]: text }, "Supabase Spot 수정 실패");
       return this.fetchState();
     },
-    async inboxKeep() { return emptyState(); },
-    async inboxDiscard() { return emptyState(); },
-    async inboxPurge() { return emptyState(); },
+    async inboxKeep(id) {
+      const row = assertSupabaseOk(
+        await client.from("inbox_items").select("lat").eq("id", id).single(),
+        "Supabase 정리함 항목 조회 실패",
+      );
+      await updateById(client, "inbox_items", id, {
+        kind: row?.lat != null ? "unsorted" : "noloc",
+        blur: false,
+      }, "Supabase 정리함 항목 유지 실패");
+      return this.fetchState();
+    },
+
+    async inboxDiscard(ids) {
+      await updateByIds(
+        client,
+        "inbox_items",
+        normalizeIds(ids),
+        { original_status: "discard_pending" },
+        "Supabase 정리함 항목 버리기 실패",
+      );
+      return this.fetchState();
+    },
+
+    async inboxPurge(ids) {
+      await deleteByIds(
+        client,
+        "inbox_items",
+        normalizeIds(ids),
+        "Supabase 정리함 항목 삭제 실패",
+      );
+      return this.fetchState();
+    },
   };
 }
 

@@ -24,6 +24,7 @@ function makeFetchClient({ user = { id: "user-123" }, rows = {} } = {}) {
   }));
   const queries = [];
   const updates = [];
+  const deletes = [];
 
   return {
     auth: {
@@ -33,13 +34,34 @@ function makeFetchClient({ user = { id: "user-123" }, rows = {} } = {}) {
       from: vi.fn().mockReturnValue({ createSignedUrl }),
     },
     from: vi.fn((table) => {
+      const filters = [];
       const query = {
         select: vi.fn(() => query),
+        eq: vi.fn((column, value) => {
+          filters.push({ column, value });
+          return query;
+        }),
+        single: vi.fn(() => {
+          const row = (rows[table] || []).find((candidate) => (
+            filters.every((filter) => candidate[filter.column] === filter.value)
+          ));
+          return Promise.resolve({ data: row || null, error: null });
+        }),
         order: vi.fn(() => query),
         insert: vi.fn(),
         update: vi.fn((payload) => ({
           eq: vi.fn((column, value) => {
             updates.push({ table, payload, column, value });
+            return Promise.resolve({ data: null, error: null });
+          }),
+          in: vi.fn((column, value) => {
+            updates.push({ table, payload, column, value });
+            return Promise.resolve({ data: null, error: null });
+          }),
+        })),
+        delete: vi.fn(() => ({
+          in: vi.fn((column, value) => {
+            deletes.push({ table, column, value });
             return Promise.resolve({ data: null, error: null });
           }),
         })),
@@ -50,7 +72,7 @@ function makeFetchClient({ user = { id: "user-123" }, rows = {} } = {}) {
       queries.push({ table, query });
       return query;
     }),
-    spies: { createSignedUrl, queries, updates },
+    spies: { createSignedUrl, queries, updates, deletes },
   };
 }
 
@@ -330,6 +352,87 @@ describe("supabaseAdapter record edits", () => {
 
     await expect(adapter.editSpot("spot-1", "owner", "nyong")).rejects.toThrow("수정할 수 없는 Spot 필드예요");
     expect(client.spies.updates).toEqual([]);
+  });
+});
+
+describe("supabaseAdapter inbox edits", () => {
+  it("keeps a located review item by returning it to unsorted", async () => {
+    const client = makeFetchClient({
+      rows: {
+        inbox_items: [{
+          id: "inbox-1",
+          kind: "review",
+          date: "2026-07-11",
+          time: "20:30",
+          lat: 37.5,
+          lng: 127.0,
+          display_path: "display/inbox/inbox-1.webp",
+          thumb_path: "thumb/inbox/inbox-1.webp",
+          auto_label: "검토 사진",
+          content_hash: "hash-inbox",
+          owner: "bara",
+          original_status: "kept",
+          blur: true,
+          updated_at: "2026-07-12T00:00:00Z",
+        }],
+      },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    const state = await adapter.inboxKeep("inbox-1");
+
+    expect(client.spies.updates[0]).toEqual({
+      table: "inbox_items",
+      payload: { kind: "unsorted", blur: false },
+      column: "id",
+      value: "inbox-1",
+    });
+    expect(state.inbox[0].id).toBe("inbox-1");
+  });
+
+  it("marks discarded inbox items pending and hides them from refreshed inbox state", async () => {
+    const client = makeFetchClient({
+      rows: {
+        inbox_items: [{
+          id: "inbox-1",
+          kind: "review",
+          date: "2026-07-11",
+          time: "20:30",
+          display_path: "display/inbox/inbox-1.webp",
+          thumb_path: "thumb/inbox/inbox-1.webp",
+          auto_label: "검토 사진",
+          content_hash: "hash-inbox",
+          owner: "bara",
+          original_status: "discard_pending",
+          blur: true,
+          updated_at: "2026-07-12T00:00:00Z",
+        }],
+      },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    const state = await adapter.inboxDiscard(["inbox-1"]);
+
+    expect(client.spies.updates[0]).toEqual({
+      table: "inbox_items",
+      payload: { original_status: "discard_pending" },
+      column: "id",
+      value: ["inbox-1"],
+    });
+    expect(state.inbox).toEqual([]);
+  });
+
+  it("purges inbox item rows", async () => {
+    const client = makeFetchClient();
+    const adapter = createSupabaseAdapter({ client });
+
+    await adapter.inboxPurge(["inbox-1", "inbox-2"]);
+
+    expect(client.spies.deletes[0]).toEqual({
+      table: "inbox_items",
+      column: "id",
+      value: ["inbox-1", "inbox-2"],
+    });
   });
 });
 
