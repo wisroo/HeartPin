@@ -756,4 +756,78 @@ describe("supabaseAdapter.uploadPhotos", () => {
     });
     expect(onProgress).toHaveBeenLastCalledWith(1);
   });
+
+  it("uploads prepared display and thumb derivatives into inbox without storing originals", async () => {
+    const client = makeUploadClient();
+    const prepareUploadItem = vi.fn().mockResolvedValue({
+      contentHash: "hash-123",
+      display: {
+        body: new Blob(["display"], { type: "image/webp" }),
+        contentType: "image/webp",
+      },
+      thumb: {
+        body: new Blob(["thumb"], { type: "image/webp" }),
+        contentType: "image/webp",
+      },
+      ratio: "4/3",
+      takenAt: "2026-06-25T10:11:12Z",
+      date: "2026-06-25",
+      time: "10:11",
+      lat: 37.5,
+      lng: 127.0,
+      label: "gps",
+      tint: "cool",
+      originalName: "gps.jpg",
+      originalSize: 3,
+    });
+    const adapter = createSupabaseAdapter({ client, prepareUploadItem });
+    const file = new File([new Uint8Array([1, 2, 3])], "gps.jpg", { type: "image/jpeg" });
+
+    const result = await adapter.uploadPhotos([file], "bara");
+
+    expect(prepareUploadItem).toHaveBeenCalledWith(expect.objectContaining({ file }), 0);
+    expect(client.spies.upload).toHaveBeenCalledWith(
+      "display/hash-123.webp",
+      expect.any(Blob),
+      { contentType: "image/webp", upsert: false },
+    );
+    expect(client.spies.upload).toHaveBeenCalledWith(
+      "thumb/hash-123.webp",
+      expect.any(Blob),
+      { contentType: "image/webp", upsert: false },
+    );
+    expect(client.spies.upload).not.toHaveBeenCalledWith(
+      expect.stringContaining("test-originals/"),
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(client.from).toHaveBeenCalledWith("inbox_items");
+    expect(client.spies.insert).toHaveBeenCalledWith([expect.objectContaining({
+      id: "ib_hash-123",
+      kind: "unsorted",
+      date: "2026-06-25",
+      time: "10:11",
+      taken_at: "2026-06-25T10:11:12Z",
+      lat: 37.5,
+      lng: 127.0,
+      display_path: "display/hash-123.webp",
+      thumb_path: "thumb/hash-123.webp",
+      auto_label: "gps",
+      ratio: "4/3",
+      tint: "cool",
+      content_hash: "hash-123",
+      original_name: "gps.jpg",
+      original_size: 3,
+      owner: "bara",
+      original_status: "kept",
+    })]);
+    expect(result.added[0]).toMatchObject({
+      id: "ib_hash-123",
+      kind: "unsorted",
+      src: "https://signed.example/photo.jpg",
+      thumb: "https://signed.example/photo.jpg",
+      content_hash: "hash-123",
+      owner: "bara",
+    });
+  });
 });

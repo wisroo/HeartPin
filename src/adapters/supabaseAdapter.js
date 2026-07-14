@@ -73,6 +73,13 @@ function dateParts(takenAt) {
   };
 }
 
+function uploadPathsForHash(contentHash) {
+  return {
+    displayPath: `display/${contentHash}.webp`,
+    thumbPath: `thumb/${contentHash}.webp`,
+  };
+}
+
 function assertSupabaseOk(result, message) {
   if (result.error) throw new Error(`${message}: ${result.error.message}`);
   return result.data;
@@ -197,6 +204,32 @@ function momentRowsForTrip(trip, inboxItems) {
       }).filter((row) => row.display_path && row.thumb_path && row.content_hash)
     ))
   ));
+}
+
+function inboxRowFromPrepared(prepared, item, owner) {
+  const { displayPath, thumbPath } = uploadPathsForHash(prepared.contentHash);
+  const fallbackParts = dateParts(prepared.takenAt);
+  return {
+    id: `ib_${prepared.contentHash}`,
+    kind: prepared.lat == null ? "noloc" : "unsorted",
+    date: prepared.date || fallbackParts.date,
+    time: prepared.time || fallbackParts.time,
+    taken_at: prepared.takenAt || null,
+    lat: prepared.lat ?? null,
+    lng: prepared.lng ?? null,
+    display_path: displayPath,
+    thumb_path: thumbPath,
+    label: prepared.label || null,
+    auto_label: prepared.label || (item.name || item.file?.name || "사진").replace(/\.[^.]+$/, "").slice(0, 26),
+    ratio: prepared.ratio || "4/3",
+    tint: prepared.tint || "cool",
+    blur: false,
+    content_hash: prepared.contentHash,
+    original_name: prepared.originalName || item.name || item.file?.name || "photo",
+    original_size: prepared.originalSize || item.size || item.file?.size || null,
+    owner,
+    original_status: "kept",
+  };
 }
 
 function sortRows(rows) {
@@ -356,7 +389,7 @@ async function assembleState(client, rows) {
   return state;
 }
 
-export function createSupabaseAdapter({ client = createSupabaseClient() } = {}) {
+export function createSupabaseAdapter({ client = createSupabaseClient(), prepareUploadItem = null } = {}) {
   return {
     async signIn(email, password) {
       assertSupabaseOk(
@@ -395,6 +428,54 @@ export function createSupabaseAdapter({ client = createSupabaseClient() } = {}) 
 
       for (let i = 0; i < normalized.length; i += 1) {
         const item = normalized[i];
+        if (prepareUploadItem) {
+          const prepared = await prepareUploadItem(item, i);
+          const { displayPath, thumbPath } = uploadPathsForHash(prepared.contentHash);
+          assertSupabaseOk(
+            await storage.upload(displayPath, prepared.display.body, {
+              contentType: prepared.display.contentType || "image/webp",
+              upsert: false,
+            }),
+            "Supabase display 업로드 실패",
+          );
+          assertSupabaseOk(
+            await storage.upload(thumbPath, prepared.thumb.body, {
+              contentType: prepared.thumb.contentType || "image/webp",
+              upsert: false,
+            }),
+            "Supabase thumb 업로드 실패",
+          );
+
+          const displaySigned = assertSupabaseOk(
+            await storage.createSignedUrl(displayPath, SIGNED_URL_SECONDS),
+            "Supabase display signed URL 생성 실패",
+          );
+          const thumbSigned = assertSupabaseOk(
+            await storage.createSignedUrl(thumbPath, SIGNED_URL_SECONDS),
+            "Supabase thumb signed URL 생성 실패",
+          );
+          const row = inboxRowFromPrepared(prepared, item, owner);
+          rows.push(row);
+          added.push({
+            id: row.id,
+            kind: row.kind,
+            date: row.date,
+            time: row.time,
+            takenAt: row.taken_at,
+            lat: row.lat,
+            lng: row.lng,
+            src: displaySigned.signedUrl,
+            thumb: thumbSigned.signedUrl,
+            autoLabel: row.auto_label,
+            ratio: row.ratio,
+            tint: row.tint,
+            content_hash: row.content_hash,
+            owner,
+          });
+          if (onProgress) onProgress((i + 1) / normalized.length);
+          continue;
+        }
+
         const path = buildTestOriginalPath(user.id, uploadSessionId, item, i);
         const body = item.bytes || item.file;
         const mimeType = item.mimeType || item.file?.type || "application/octet-stream";
@@ -440,9 +521,10 @@ export function createSupabaseAdapter({ client = createSupabaseClient() } = {}) 
       }
 
       if (rows.length) {
+        const table = prepareUploadItem ? "inbox_items" : "test_uploads";
         assertSupabaseOk(
-          await client.from("test_uploads").insert(rows),
-          "Supabase test_uploads 기록 실패",
+          await client.from(table).insert(rows),
+          prepareUploadItem ? "Supabase inbox_items 기록 실패" : "Supabase test_uploads 기록 실패",
         );
       }
 
