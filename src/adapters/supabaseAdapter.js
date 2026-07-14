@@ -1,4 +1,5 @@
 import { createSupabaseClient } from "./supabaseClient.js";
+import { createBrowserUploadPreparer } from "./supabaseUploadPrep.js";
 
 const PHOTOS_BUCKET = "photos";
 const SIGNED_URL_SECONDS = 60 * 60;
@@ -389,7 +390,7 @@ async function assembleState(client, rows) {
   return state;
 }
 
-export function createSupabaseAdapter({ client = createSupabaseClient(), prepareUploadItem = null } = {}) {
+export function createSupabaseAdapter({ client = createSupabaseClient(), prepareUploadItem = createBrowserUploadPreparer() } = {}) {
   return {
     async signIn(email, password) {
       assertSupabaseOk(

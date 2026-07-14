@@ -715,7 +715,7 @@ describe("supabaseAdapter.uploadPhotos", () => {
 
   it("uploads temporary originals and records GPS metadata", async () => {
     const client = makeUploadClient();
-    const adapter = createSupabaseAdapter({ client });
+    const adapter = createSupabaseAdapter({ client, prepareUploadItem: null });
     const onProgress = vi.fn();
     const bytes = new Uint8Array([1, 2, 3]);
     const file = new File([bytes], "gps.jpg", { type: "image/jpeg", lastModified: 1719705600000 });
