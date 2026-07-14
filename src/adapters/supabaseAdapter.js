@@ -105,6 +105,10 @@ function normalizeIds(ids) {
   return Array.isArray(ids) ? ids : [ids];
 }
 
+function dayIdFor(tripId, day, index) {
+  return day.id || `${tripId}-day-${index + 1}`;
+}
+
 async function insertRows(client, table, rows, message) {
   if (!rows.length) return;
   assertSupabaseOk(
@@ -119,6 +123,72 @@ async function fetchInboxItemsByIds(client, ids) {
     await client.from("inbox_items").select("*").in("id", ids),
     "Supabase 정리함 항목 조회 실패",
   ) || [];
+}
+
+function tripRowsForInsert(trip) {
+  return [{
+    id: trip.id,
+    region: trip.region,
+    title: trip.title,
+    start_date: trip.start || null,
+    date_label: trip.dateLabel || null,
+    tags: trip.tags || [],
+  }];
+}
+
+function dayRowsForInsert(trip) {
+  return (trip.days || []).map((day, index) => ({
+    id: dayIdFor(trip.id, day, index),
+    trip_id: trip.id,
+    label: day.label,
+    date_label: day.date,
+    sort_order: index,
+  }));
+}
+
+function spotRowsForInsert(trip) {
+  return (trip.days || []).flatMap((day, dayIndex) => (
+    (day.spots || []).map((spot, spotIndex) => ({
+      id: spot.id,
+      day_id: dayIdFor(trip.id, day, dayIndex),
+      name: spot.name,
+      time: spot.time,
+      lat: spot.lat,
+      lng: spot.lng,
+      mood: spot.mood,
+      guide: spot.guide,
+      reaction: spot.reaction,
+      sort_order: spotIndex,
+    }))
+  ));
+}
+
+function momentRowsForTrip(trip, inboxItems) {
+  const inboxByHash = new Map(inboxItems.map((item) => [item.content_hash, item]));
+  return (trip.days || []).flatMap((day) => (
+    (day.spots || []).flatMap((spot) => (
+      (spot.photos || []).map((photo, photoIndex) => {
+        const source = inboxByHash.get(photo.content_hash) || {};
+        return {
+          spot_id: spot.id,
+          display_path: photo.display_path || source.display_path,
+          thumb_path: photo.thumb_path || source.thumb_path,
+          label: photo.label,
+          ratio: photo.ratio || "4/3",
+          tint: photo.tint,
+          content_hash: photo.content_hash,
+          original_name: photo.original_name || source.original_name,
+          original_size: photo.original_size || source.original_size,
+          taken_at: photo.taken_at || source.taken_at,
+          lat: photo.lat ?? source.lat,
+          lng: photo.lng ?? source.lng,
+          owner: photo.owner || source.owner,
+          original_status: photo.original_status || "kept",
+          sort_order: photoIndex,
+        };
+      }).filter((row) => row.display_path && row.thumb_path && row.content_hash)
+    ))
+  ));
 }
 
 function sortRows(rows) {
@@ -409,7 +479,16 @@ export function createSupabaseAdapter({ client = createSupabaseClient() } = {}) 
       await deleteByIds(client, "inbox_items", placedIds, "Supabase 배치된 정리함 항목 삭제 실패");
       return this.fetchState();
     },
-    async addTrip() { return emptyState(); },
+    async addTrip(trip) {
+      const sourceIds = trip?._sourceIds || [];
+      const sourceItems = await fetchInboxItemsByIds(client, sourceIds);
+      await insertRows(client, "trips", tripRowsForInsert(trip), "Supabase 여행 추가 실패");
+      await insertRows(client, "days", dayRowsForInsert(trip), "Supabase Day 추가 실패");
+      await insertRows(client, "spots", spotRowsForInsert(trip), "Supabase Spot 추가 실패");
+      await insertRows(client, "moments", momentRowsForTrip(trip, sourceItems), "Supabase 모먼트 추가 실패");
+      await deleteByIds(client, "inbox_items", sourceIds, "Supabase 새 여행 원본 정리 실패");
+      return this.fetchState();
+    },
     async editTrip(tripId, text) {
       await updateById(client, "trips", tripId, { title: text }, "Supabase 여행 수정 실패");
       return this.fetchState();

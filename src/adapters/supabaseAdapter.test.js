@@ -517,6 +517,115 @@ describe("supabaseAdapter.placePhotos", () => {
   });
 });
 
+describe("supabaseAdapter.addTrip", () => {
+  it("inserts a trip tree and removes source inbox items", async () => {
+    const client = makeFetchClient({
+      rows: {
+        inbox_items: [{
+          id: "inbox-1",
+          display_path: "display/inbox/inbox-1.webp",
+          thumb_path: "thumb/inbox/inbox-1.webp",
+          content_hash: "hash-inbox",
+          original_name: "photo.jpg",
+          original_size: 1234,
+          taken_at: "2026-07-11T20:30:00Z",
+          lat: 37.5,
+          lng: 127.0,
+          owner: "bara",
+        }],
+      },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await adapter.addTrip({
+      id: "trip-1",
+      region: "domestic",
+      start: "2026-07-11",
+      title: "새 여행",
+      dateLabel: "2026.07.11 – 07.11",
+      tags: ["국내", "새 여행"],
+      _sourceIds: ["inbox-1"],
+      days: [{
+        label: "Day 1",
+        date: "07.11 토",
+        spots: [{
+          id: "spot-1",
+          name: "새 장소",
+          time: "20:30",
+          lat: 37.5,
+          lng: 127.0,
+          mood: "우리 기록",
+          guide: "여기서의 기록이야.",
+          reaction: "좋다!",
+          photos: [{
+            label: "사용자 메모",
+            ratio: "4/3",
+            tint: "cool",
+            content_hash: "hash-inbox",
+            owner: "bara",
+            taken_at: "2026-07-11T20:30:00Z",
+            lat: 37.5,
+            lng: 127.0,
+          }],
+        }],
+      }],
+    });
+
+    expect(client.spies.inserts[0]).toEqual({
+      table: "trips",
+      payload: [expect.objectContaining({
+        id: "trip-1",
+        region: "domestic",
+        title: "새 여행",
+        start_date: "2026-07-11",
+        date_label: "2026.07.11 – 07.11",
+        tags: ["국내", "새 여행"],
+      })],
+    });
+    expect(client.spies.inserts[1]).toEqual({
+      table: "days",
+      payload: [expect.objectContaining({
+        id: "trip-1-day-1",
+        trip_id: "trip-1",
+        label: "Day 1",
+        date_label: "07.11 토",
+        sort_order: 0,
+      })],
+    });
+    expect(client.spies.inserts[2]).toEqual({
+      table: "spots",
+      payload: [expect.objectContaining({
+        id: "spot-1",
+        day_id: "trip-1-day-1",
+        name: "새 장소",
+        time: "20:30",
+        lat: 37.5,
+        lng: 127.0,
+        mood: "우리 기록",
+        guide: "여기서의 기록이야.",
+        reaction: "좋다!",
+        sort_order: 0,
+      })],
+    });
+    expect(client.spies.inserts[3]).toEqual({
+      table: "moments",
+      payload: [expect.objectContaining({
+        spot_id: "spot-1",
+        display_path: "display/inbox/inbox-1.webp",
+        thumb_path: "thumb/inbox/inbox-1.webp",
+        label: "사용자 메모",
+        content_hash: "hash-inbox",
+        owner: "bara",
+      })],
+    });
+    expect(client.spies.deletes[0]).toEqual({
+      table: "inbox_items",
+      column: "id",
+      value: ["inbox-1"],
+    });
+  });
+});
+
 describe("supabaseAdapter.uploadPhotos", () => {
   beforeEach(() => {
     vi.useFakeTimers();
