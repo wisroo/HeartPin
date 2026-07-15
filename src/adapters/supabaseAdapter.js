@@ -158,6 +158,7 @@ function dayRowsForInsert(trip) {
     trip_id: trip.id,
     label: day.label,
     date_label: day.date,
+    date_value: day.dateValue || null,
     sort_order: index,
   }));
 }
@@ -246,6 +247,16 @@ function rowVersion(rows) {
     const time = Date.parse(row.updated_at || row.created_at || "");
     return Number.isNaN(time) ? max : Math.max(max, time);
   }, 1);
+}
+
+function computeVersion(rows) {
+  return Math.max(
+    rowVersion(rows.trips),
+    rowVersion(rows.days),
+    rowVersion(rows.spots),
+    rowVersion(rows.moments),
+    rowVersion(rows.inboxItems),
+  );
 }
 
 async function fetchOrderedTable(client, table) {
@@ -380,13 +391,7 @@ async function assembleState(client, rows) {
     state.inbox.push(await inboxRowToItem(row, signedUrl));
   }
 
-  state.version = Math.max(
-    rowVersion(rows.trips),
-    rowVersion(rows.days),
-    rowVersion(rows.spots),
-    rowVersion(rows.moments),
-    rowVersion(rows.inboxItems),
-  );
+  state.version = computeVersion(rows);
   return state;
 }
 
@@ -410,9 +415,9 @@ export function createSupabaseAdapter({ client = createSupabaseClient(), prepare
         fetchOrderedTable(client, "moments"),
         fetchCreatedTable(client, "inbox_items"),
       ]);
-      const state = await assembleState(client, { trips, days, spots, moments, inboxItems });
-      if (since != null && state.version <= since) return { unchanged: true };
-      return state;
+      const rows = { trips, days, spots, moments, inboxItems };
+      if (since != null && computeVersion(rows) <= since) return { unchanged: true };
+      return assembleState(client, rows);
     },
 
     async uploadPhotos(items, owner, onProgress) {

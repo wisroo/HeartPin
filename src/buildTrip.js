@@ -51,7 +51,7 @@ export function buildTripFromGroups(pool) {
       };
     });
     const dd = new Date(date + "T00:00:00");
-    return { label: "Day " + (di + 1), date: `${date.slice(5, 7)}.${date.slice(8, 10)} ${WD[dd.getDay()]}`, spots };
+    return { label: "Day " + (di + 1), date: `${date.slice(5, 7)}.${date.slice(8, 10)} ${WD[dd.getDay()]}`, dateValue: date, spots };
   });
   const region = allN ? (inKorea(allLat / allN, allLng / allN) ? "domestic" : "intl") : "domestic";
   const nights = Math.max(0, dates.length - 1);
@@ -99,7 +99,7 @@ export function buildTrip(items) {
       };
     });
     const dd = new Date(date + "T00:00:00");
-    return { label: "Day " + (di + 1), date: `${date.slice(5, 7)}.${date.slice(8, 10)} ${WD[dd.getDay()]}`, spots };
+    return { label: "Day " + (di + 1), date: `${date.slice(5, 7)}.${date.slice(8, 10)} ${WD[dd.getDay()]}`, dateValue: date, spots };
   });
   const cLat = allLat / allN, cLng = allLng / allN;
   const region = inKorea(cLat, cLng) ? "domestic" : "intl";

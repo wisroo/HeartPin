@@ -284,6 +284,31 @@ describe("supabaseAdapter.fetchState", () => {
       unchanged: true,
     });
   });
+
+  it("skips signed URL work when the version is not newer than since", async () => {
+    const client = makeFetchClient({
+      rows: {
+        inbox_items: [{
+          id: "inbox-1",
+          kind: "noloc",
+          date: "2026-07-11",
+          time: "20:30",
+          display_path: "display/inbox/inbox-1.webp",
+          thumb_path: "thumb/inbox/inbox-1.webp",
+          content_hash: "hash-inbox",
+          owner: "bara",
+          original_status: "kept",
+          updated_at: "2026-07-12T00:00:00Z",
+        }],
+      },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    const result = await adapter.fetchState(Date.parse("2026-07-12T00:00:00Z"));
+
+    expect(result).toEqual({ unchanged: true });
+    expect(client.spies.createSignedUrl).not.toHaveBeenCalled();
+  });
 });
 
 describe("supabaseAdapter record edits", () => {
@@ -696,6 +721,28 @@ describe("supabaseAdapter.addTrip", () => {
       table: "inbox_items",
       column: "id",
       value: ["inbox-1"],
+    });
+  });
+
+  it("persists day date_value so a later new-spot placement can match by date", async () => {
+    const client = makeFetchClient({ rows: { inbox_items: [] } });
+    const adapter = createSupabaseAdapter({ client });
+
+    await adapter.addTrip({
+      id: "trip-1",
+      region: "domestic",
+      start: "2026-07-11",
+      title: "새 여행",
+      dateLabel: "2026.07.11 – 07.11",
+      tags: [],
+      _sourceIds: [],
+      days: [{ label: "Day 1", date: "07.11 토", dateValue: "2026-07-11", spots: [] }],
+    });
+
+    const daysInsert = client.spies.inserts.find((entry) => entry.table === "days");
+    expect(daysInsert.payload[0]).toMatchObject({
+      id: "trip-1-day-1",
+      date_value: "2026-07-11",
     });
   });
 });
