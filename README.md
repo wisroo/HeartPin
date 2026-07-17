@@ -25,13 +25,14 @@ Phase 1 전환용 스키마와 환경변수 계약은 레포에 포함되어 있
 
 현재 기본 실행 모드는 `local`입니다. Supabase MVP 영속화를 테스트할 때는 `.env.local`에서 `VITE_HEARTPIN_API_MODE=supabase`로 전환합니다. 앱에는 Supabase URL과 publishable key만 넣고, 로그인 계정 비밀번호는 앱 로그인 화면에서 직접 입력합니다.
 
-Supabase 업로드는 원본을 영구 보관하지 않습니다. 브라우저에서 SHA-256을 계산하고 display/thumb WebP 압축본을 private `photos` bucket에 저장한 뒤, `inbox_items`에 메타데이터를 기록합니다.
+Supabase 업로드는 원본을 영구 보관하지 않습니다. 브라우저에서 SHA-256을 계산하고 display/thumb WebP 압축본을 private `photos` bucket에 영구 저장한 뒤, `inbox_items`에 메타데이터를 기록합니다. 준비된 업로드에서는 상대방이 원본을 받을 수 있도록 원본을 private relay 경로에 임시 저장하고 `transfer_queue`에 반대 owner와 서버에서 계산한 7일 만료 시각을 함께 기록합니다.
 
-Capacitor 실기기 업로드 spike에서 쓰던 임시 원본 검증 prefix는 디버그/레거시 경로로만 남겨 둡니다.
+상대방 다운로드/저장 확인, `photo_copies` 기록, 만료 원본 삭제 작업은 후속 구현 범위입니다. 따라서 현재 자동화 검증은 relay 생성 계약까지만 다루며, 실제 Supabase와 기기에서의 수령·삭제 동작을 검증한 것으로 간주하지 않습니다. Capacitor 실기기 업로드 spike에서 쓰던 임시 원본 검증 prefix는 디버그/레거시 경로로만 남겨 둡니다.
 
 ```text
-photos/display/<content_hash>.webp
-photos/thumb/<content_hash>.webp
+photos/display/<content_hash>.webp                                             # permanent
+photos/thumb/<content_hash>.webp                                               # permanent
+photos/relay-originals/<auth.uid()>/<transfer-id>/<safe-original-name>         # temporary, expires_at = 7 days
 photos/test-originals/<auth.uid()>/<upload_session_id>/<safe_file_name>  # legacy spike only
 ```
 

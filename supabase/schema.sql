@@ -107,15 +107,185 @@ on public.photo_copies (content_hash, location, coalesce(owner, 'shared'));
 
 create table if not exists public.transfer_queue (
   id text primary key default gen_random_uuid()::text,
+  user_id uuid not null references auth.users(id) on delete cascade,
   content_hash text not null,
-  dest text not null,
+  source_owner text not null
+    constraint transfer_queue_source_owner_check check (source_owner in ('bara', 'nyong')),
+  dest_owner text not null
+    constraint transfer_queue_dest_owner_check check (dest_owner in ('bara', 'nyong')),
   tmp_path text,
-  status text not null default 'queued'
-    check (status in ('queued', 'uploaded', 'landed', 'deleted', 'failed')),
-  expires_at timestamptz,
+  original_name text not null,
+  original_size bigint,
+  mime_type text,
+  status text not null default 'uploaded'
+    constraint transfer_queue_status_check check (status in ('uploaded', 'landed', 'deleted', 'failed')),
+  expires_at timestamptz not null default (now() + interval '7 days'),
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint transfer_queue_distinct_owners check (source_owner <> dest_owner),
+  constraint transfer_queue_uploaded_path_check
+    check (status <> 'uploaded' or nullif(btrim(tmp_path), '') is not null)
 );
+
+do $$
+declare
+  unsupported_destinations boolean;
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'transfer_queue'
+      and column_name = 'dest'
+  ) then
+    execute $preflight$
+      select exists (
+        select 1
+        from public.transfer_queue
+        where dest is null or dest not in ('bara', 'nyong')
+      )
+    $preflight$ into unsupported_destinations;
+
+    if unsupported_destinations then
+      raise exception 'unsupported legacy transfer_queue destinations must be cleaned or archived before rerunning';
+    end if;
+  end if;
+end;
+$$;
+
+do $$
+declare
+  has_user_id boolean;
+  legacy_rows boolean;
+  auth_user_count bigint;
+begin
+  select exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'transfer_queue'
+      and column_name = 'user_id'
+  ) into has_user_id;
+
+  if has_user_id then
+    execute 'select exists (select 1 from public.transfer_queue where user_id is null)'
+      into legacy_rows;
+  else
+    select exists (select 1 from public.transfer_queue) into legacy_rows;
+  end if;
+
+  if legacy_rows then
+    select count(*) into auth_user_count from auth.users;
+    if auth_user_count <> 1 then
+      raise exception 'legacy transfer_queue rows require exactly one shared auth.users account before rerunning';
+    end if;
+  end if;
+end;
+$$;
+
+alter table public.transfer_queue add column if not exists user_id uuid;
+alter table public.transfer_queue add column if not exists source_owner text;
+alter table public.transfer_queue add column if not exists dest_owner text;
+alter table public.transfer_queue add column if not exists original_name text;
+alter table public.transfer_queue add column if not exists original_size bigint;
+alter table public.transfer_queue add column if not exists mime_type text;
+alter table public.transfer_queue add column if not exists expires_at timestamptz;
+
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'transfer_queue'
+      and column_name = 'dest'
+  ) then
+    execute $migration$
+      update public.transfer_queue
+      set dest_owner = dest
+      where dest_owner is null
+        and dest in ('bara', 'nyong')
+    $migration$;
+  end if;
+end;
+$$;
+
+update public.transfer_queue
+set user_id = (select id from auth.users limit 1)
+where user_id is null;
+
+update public.transfer_queue
+set source_owner = case dest_owner
+  when 'bara' then 'nyong'
+  when 'nyong' then 'bara'
+end
+where source_owner is null;
+
+update public.transfer_queue
+set original_name = coalesce(
+  nullif(regexp_replace(tmp_path, '^.*/', ''), ''),
+  content_hash
+)
+where original_name is null;
+
+update public.transfer_queue
+set status = 'failed'
+where status in ('queued', 'uploaded')
+  and nullif(btrim(tmp_path), '') is null;
+
+update public.transfer_queue
+set status = 'uploaded'
+where status = 'queued'
+  and nullif(btrim(tmp_path), '') is not null;
+
+update public.transfer_queue
+set expires_at = created_at + interval '7 days';
+
+alter table public.transfer_queue alter column source_owner set not null;
+alter table public.transfer_queue alter column dest_owner set not null;
+alter table public.transfer_queue alter column original_name set not null;
+alter table public.transfer_queue alter column status set default 'uploaded';
+alter table public.transfer_queue alter column expires_at set not null;
+alter table public.transfer_queue alter column expires_at
+  set default (now() + interval '7 days');
+
+alter table public.transfer_queue drop constraint if exists transfer_queue_source_owner_check;
+alter table public.transfer_queue add constraint transfer_queue_source_owner_check
+  check (source_owner in ('bara', 'nyong'));
+alter table public.transfer_queue drop constraint if exists transfer_queue_dest_owner_check;
+alter table public.transfer_queue add constraint transfer_queue_dest_owner_check
+  check (dest_owner in ('bara', 'nyong'));
+alter table public.transfer_queue drop constraint if exists transfer_queue_distinct_owners;
+alter table public.transfer_queue add constraint transfer_queue_distinct_owners
+  check (source_owner <> dest_owner);
+alter table public.transfer_queue drop constraint if exists transfer_queue_status_check;
+alter table public.transfer_queue add constraint transfer_queue_status_check
+  check (status in ('uploaded', 'landed', 'deleted', 'failed'));
+alter table public.transfer_queue drop constraint if exists transfer_queue_uploaded_path_check;
+alter table public.transfer_queue add
+  constraint transfer_queue_uploaded_path_check
+  check (status <> 'uploaded' or nullif(btrim(tmp_path), '') is not null);
+alter table public.transfer_queue drop constraint if exists transfer_queue_user_id_not_null;
+alter table public.transfer_queue add
+  constraint transfer_queue_user_id_not_null
+  check (user_id is not null) not valid;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'public.transfer_queue'::regclass
+      and conname = 'transfer_queue_user_id_fkey'
+  ) then
+    alter table public.transfer_queue add
+      constraint transfer_queue_user_id_fkey
+      foreign key (user_id) references auth.users(id) on delete cascade not valid;
+  end if;
+end;
+$$;
+
+alter table public.transfer_queue drop column if exists dest;
 
 create table if not exists public.test_uploads (
   id text primary key default gen_random_uuid()::text,
@@ -141,6 +311,22 @@ language plpgsql
 as $$
 begin
   new.updated_at = now();
+  return new;
+end;
+$$;
+
+create or replace function public.set_transfer_queue_expiry()
+returns trigger
+language plpgsql
+as $$
+begin
+  if tg_op = 'INSERT' then
+    new.created_at = now();
+    new.expires_at = new.created_at + interval '7 days';
+  else
+    new.created_at = old.created_at;
+    new.expires_at = old.expires_at;
+  end if;
   return new;
 end;
 $$;
@@ -172,6 +358,10 @@ for each row execute function public.touch_updated_at();
 drop trigger if exists touch_transfer_queue_updated_at on public.transfer_queue;
 create trigger touch_transfer_queue_updated_at before update on public.transfer_queue
 for each row execute function public.touch_updated_at();
+
+drop trigger if exists set_transfer_queue_expiry on public.transfer_queue;
+create trigger set_transfer_queue_expiry before insert or update on public.transfer_queue
+for each row execute function public.set_transfer_queue_expiry();
 
 drop trigger if exists touch_test_uploads_updated_at on public.test_uploads;
 create trigger touch_test_uploads_updated_at before update on public.test_uploads
@@ -206,7 +396,9 @@ create policy "authenticated photo_copies" on public.photo_copies
   for all to authenticated using (true) with check (true);
 drop policy if exists "authenticated transfer_queue" on public.transfer_queue;
 create policy "authenticated transfer_queue" on public.transfer_queue
-  for all to authenticated using (true) with check (true);
+  for all to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
 drop policy if exists "own test_uploads" on public.test_uploads;
 create policy "own test_uploads" on public.test_uploads
   for all to authenticated
@@ -224,8 +416,14 @@ create policy "authenticated read photos" on storage.objects
     and (
       (storage.foldername(name))[1] in ('display', 'thumb')
       or (
-        (storage.foldername(name))[1] = 'test-originals'
-        and (storage.foldername(name))[2] = (select auth.uid()::text)
+        (storage.foldername(name))[2] = (select auth.uid()::text)
+        and (
+          (storage.foldername(name))[1] = 'test-originals'
+          or (
+            (storage.foldername(name))[1] = 'relay-originals'
+            and array_length(storage.foldername(name), 1) = 3
+          )
+        )
       )
     )
   );
@@ -236,8 +434,14 @@ create policy "authenticated write photos" on storage.objects
     and (
       (storage.foldername(name))[1] in ('display', 'thumb')
       or (
-        (storage.foldername(name))[1] = 'test-originals'
-        and (storage.foldername(name))[2] = (select auth.uid()::text)
+        (storage.foldername(name))[2] = (select auth.uid()::text)
+        and (
+          (storage.foldername(name))[1] = 'test-originals'
+          or (
+            (storage.foldername(name))[1] = 'relay-originals'
+            and array_length(storage.foldername(name), 1) = 3
+          )
+        )
       )
     )
   );
@@ -248,8 +452,14 @@ create policy "authenticated update photos" on storage.objects
     and (
       (storage.foldername(name))[1] in ('display', 'thumb')
       or (
-        (storage.foldername(name))[1] = 'test-originals'
-        and (storage.foldername(name))[2] = (select auth.uid()::text)
+        (storage.foldername(name))[2] = (select auth.uid()::text)
+        and (
+          (storage.foldername(name))[1] = 'test-originals'
+          or (
+            (storage.foldername(name))[1] = 'relay-originals'
+            and array_length(storage.foldername(name), 1) = 3
+          )
+        )
       )
     )
   ) with check (
@@ -257,8 +467,14 @@ create policy "authenticated update photos" on storage.objects
     and (
       (storage.foldername(name))[1] in ('display', 'thumb')
       or (
-        (storage.foldername(name))[1] = 'test-originals'
-        and (storage.foldername(name))[2] = (select auth.uid()::text)
+        (storage.foldername(name))[2] = (select auth.uid()::text)
+        and (
+          (storage.foldername(name))[1] = 'test-originals'
+          or (
+            (storage.foldername(name))[1] = 'relay-originals'
+            and array_length(storage.foldername(name), 1) = 3
+          )
+        )
       )
     )
   );
@@ -267,7 +483,13 @@ create policy "authenticated delete photos" on storage.objects
   for delete to authenticated using (
     bucket_id = 'photos'
     and (
-      (storage.foldername(name))[1] = 'test-originals'
-      and (storage.foldername(name))[2] = (select auth.uid()::text)
+      (storage.foldername(name))[2] = (select auth.uid()::text)
+      and (
+        (storage.foldername(name))[1] = 'test-originals'
+        or (
+          (storage.foldername(name))[1] = 'relay-originals'
+          and array_length(storage.foldername(name), 1) = 3
+        )
+      )
     )
   );
