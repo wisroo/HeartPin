@@ -1,11 +1,11 @@
 # Phase 3 Automatic Original Relay Design
 
 Date: 2026-07-17
-Status: Approved direction, awaiting written-spec review
+Status: Implemented, awaiting user verification
 
 ## Goal
 
-When either `bara` or `nyong` records a photo, HeartPin permanently stores only the existing display and thumb derivatives, while also placing the original in private Supabase Storage for the other person to receive. The original is temporary: successful recipient save removes it, and an expiry fallback removes it after seven days.
+When either `bara` or `nyong` records a photo, HeartPin permanently stores only the existing display and thumb derivatives, while also placing the original in private Supabase Storage for the other person to receive. The implemented upload slice creates that temporary relay with a server-enforced seven-day expiry. Successful recipient save, relay deletion, and scheduled expiry cleanup remain follow-up slices.
 
 This moves the original-relay path ahead of the remaining Phase 1B external-drive and real-device validation work. Those deferred items remain valid but do not block this Phase 3 slice.
 
@@ -72,10 +72,10 @@ The first migration adds `source_owner` and `dest_owner`, copies any valid legac
 
 `photo_copies` keeps its current unique identity `(content_hash, location, owner)` and uses `status = 'present'` after the recipient confirms a successful save. Initial recipient locations are `bara_phone`, `nyong_phone`, and `personal_pc`. The first implementation slice does not write `photo_copies`; it only creates the transfer.
 
-Temporary originals use a distinct private prefix:
+Temporary originals use a distinct private prefix inside the private `photos` bucket:
 
 ```text
-relay-originals/<auth.uid()>/<transfer-id>/<safe-original-name>
+photos/relay-originals/<auth.uid()>/<transfer-id>/<safe-original-name>
 ```
 
 The legacy `test-originals` prefix remains available only for the completed upload spike until a separate cleanup change removes it.
@@ -108,9 +108,9 @@ These are follow-up slices, not part of the first implementation:
 
 If download or save fails, the transfer stays `uploaded` and can be retried until expiry. A deletion failure must remain visible as cleanup work rather than falsely marking the transfer deleted.
 
-## First Implementation Slice
+## Implemented Relay-Creation Slice
 
-The next code change is intentionally limited to automatic relay creation during prepared Supabase uploads:
+The implemented code change is intentionally limited to automatic relay creation during prepared Supabase uploads:
 
 - update the idempotent Supabase schema and Storage policies for `relay-originals`;
 - add pure helpers for destination and relay-path construction;
@@ -119,7 +119,7 @@ The next code change is intentionally limited to automatic relay creation during
 - compensate by removing the inbox row and temporary original when queue persistence fails;
 - add adapter tests for the happy path, opposite-recipient mapping, expiry, and both persistence-failure cleanup paths.
 
-Out of scope for that slice: transfer UI, signed recipient download, `photo_copies` confirmation, scheduled expiry cleanup, duplicate-upload UX, permanent derivative cleanup, external-drive work, and real-device validation.
+Out of scope for that slice: transfer UI, signed recipient download, `photo_copies` confirmation, scheduled expiry cleanup, duplicate-upload UX, permanent derivative cleanup, external-drive work, and real-device validation. The implementation is therefore awaiting user verification in a configured Supabase project and on target devices; the automated checks below do not replace that work.
 
 ## Verification
 
