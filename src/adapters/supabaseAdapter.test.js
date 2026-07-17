@@ -4,6 +4,7 @@ import { buildTestOriginalPath, createSupabaseAdapter } from "./supabaseAdapter.
 function makeUploadClient({
   user = { id: "user-123" },
   uploadError = null,
+  uploadErrors = {},
   insertError = null,
   insertErrors = {},
   signedUrlErrors = {},
@@ -19,7 +20,7 @@ function makeUploadClient({
   const upload = vi.fn((path, body, options) => {
     uploads.push({ path, body, options });
     operations.push({ type: "upload", path });
-    return Promise.resolve({ data: { path: "uploaded" }, error: uploadError });
+    return Promise.resolve({ data: { path: "uploaded" }, error: uploadErrors[path] || uploadError });
   });
   const remove = vi.fn((paths) => {
     operations.push({ type: "remove", paths });
@@ -954,6 +955,7 @@ describe("supabaseAdapter.uploadPhotos", () => {
         table: "transfer_queue",
         payload: [expect.objectContaining({
           id: "tr_hash-123",
+          user_id: "user-123",
           content_hash: "hash-123",
           source_owner: "bara",
           dest_owner: "nyong",
@@ -982,6 +984,35 @@ describe("supabaseAdapter.uploadPhotos", () => {
       owner: "bara",
     });
     expect(onProgress).toHaveBeenLastCalledWith(1);
+  });
+
+  it("stops before persistence when the relay original upload fails", async () => {
+    const relayPath = "relay-originals/user-123/tr_hash-123/gps.jpg";
+    const client = makeUploadClient({
+      uploadErrors: {
+        [relayPath]: { message: "relay unavailable" },
+      },
+    });
+    const adapter = createSupabaseAdapter({
+      client,
+      prepareUploadItem: vi.fn().mockResolvedValue(preparedUpload()),
+    });
+    const onProgress = vi.fn();
+
+    await expect(adapter.uploadPhotos([
+      new File([new Uint8Array([1, 2, 3])], "gps.jpg", { type: "image/jpeg" }),
+    ], "bara", onProgress)).rejects.toThrow(
+      "Supabase relay original 업로드 실패: relay unavailable",
+    );
+
+    expect(client.spies.uploads.map(({ path }) => path)).toEqual([
+      "display/hash-123.webp",
+      "thumb/hash-123.webp",
+      relayPath,
+    ]);
+    expect(client.spies.inserts).toEqual([]);
+    expect(onProgress).not.toHaveBeenCalled();
+    expect(client.spies.remove).not.toHaveBeenCalled();
   });
 
   it("routes a nyong original relay to bara", async () => {

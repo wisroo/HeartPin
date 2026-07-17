@@ -124,7 +124,7 @@ inbox_items(id, kind, taken_at, lat, lng, display_url, thumb_url,
 
 -- Phase 3에서 사용
 photo_copies(content_hash, owner, location, status, path, checked_at)
-transfer_queue(id, content_hash, source_owner, dest_owner, tmp_path,
+transfer_queue(id, user_id, content_hash, source_owner, dest_owner, tmp_path,
                original_name, original_size, mime_type, status, expires_at)
 ```
 
@@ -285,9 +285,9 @@ Phase 5  개방·확장                  미착수/선택
 
 #### 진행 로그 — 2026-07-17 · Phase 3-1 자동 임시 원본 릴레이 생성
 
-- **스키마 계약**: `transfer_queue`의 source/destination owner와 원본 메타데이터, 서버가 계산하는 7일 만료, 인증 UID와 relay 경로 깊이를 확인하는 Storage policy 테스트를 추가했다. 이는 SQL 계약의 자동 검증이며 실제 Supabase 프로젝트에 migration을 실행했다는 의미는 아니다.
+- **스키마 계약**: `transfer_queue`의 shared-account `user_id`와 계정 범위 RLS, source/destination owner와 원본 메타데이터, 서버 소유 생성 시각·7일 만료, 안전한 legacy destination/status/account migration, 인증 UID와 relay 경로 깊이를 확인하는 source-contract 테스트를 추가했다. 이는 SQL 계약의 자동 검증이며 실제 Supabase 프로젝트에 migration을 실행하거나 live RLS를 확인했다는 의미는 아니다.
 - **업로드 경로**: prepared upload가 영구 display/thumb → 임시 원본 → `inbox_items` → 반대 owner의 `transfer_queue` 순서로 기록되고, 두 DB 기록 뒤에만 진행률을 완료한다. inbox/queue 실패 시 임시 원본과 필요하면 inbox를 보상 삭제하는 adapter 테스트를 추가했다.
-- **자동 검증**: schema/adapter 계약을 포함해 26개 test file의 77/77 테스트와 `npm run build`가 통과했다.
+- **자동 검증**: schema/adapter 계약을 포함해 26개 test file의 82/82 테스트와 `npm run build`가 통과했다.
 - **남은 범위**: 실제 Supabase Storage/RLS 및 사진·브라우저·기기 검증, 3-2 상대방 다운로드/저장, 3-3 저장 확인·즉시 삭제, 3-4 만료 cleanup은 구현·검증되지 않았다. 원본 수령 성공을 아직 주장하지 않는다.
 
 #### 진행 로그 — 2026-07-15 · PR #3 (Phase 1B 영속화 슬라이스)

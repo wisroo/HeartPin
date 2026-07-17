@@ -513,6 +513,7 @@ export function createSupabaseAdapter({ client = createSupabaseClient(), prepare
             assertSupabaseOk(
               await client.from("transfer_queue").insert([{
                 id: transferId,
+                user_id: user.id,
                 content_hash: prepared.contentHash,
                 source_owner: owner,
                 dest_owner: relayDestination,

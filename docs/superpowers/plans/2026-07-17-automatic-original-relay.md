@@ -12,7 +12,9 @@
 
 - Shared Supabase account; logical owners are only `bara` and `nyong`.
 - Permanent display/thumb; temporary original at `relay-originals/<auth.uid()>/<transfer-id>/<safe-original-name>`.
-- `expires_at` is exactly seven days after creation.
+- Each transfer carries the authenticated shared-account `user_id`, and RLS restricts it to `auth.uid()`.
+- The database overwrites insert `created_at`, derives `expires_at` exactly seven days later, and preserves both on updates.
+- Legacy migration rejects unsupported destinations, requires one shared auth user before row backfill, converts only non-empty relay paths to `uploaded`, and marks pathless queued/uploaded rows `failed`.
 - Preserve the legacy `test-originals` spike path.
 - No transfer UI, downloads, `photo_copies`, expiry job, duplicate handling, or derivative cleanup.
 - Real Supabase, photo, browser, and device checks remain Local-only.
@@ -27,7 +29,7 @@
 
 **Interfaces:**
 - Consumes: rerunnable `supabase/schema.sql`.
-- Produces: explicit transfer owner/original columns and user-scoped `relay-originals` Storage access.
+- Produces: account-scoped transfer rows, explicit transfer owner/original columns, server-owned retention timestamps, safe legacy migration, and user-scoped `relay-originals` Storage access.
 
 - [x] **Step 1: Write the failing schema contract test**
 
@@ -87,21 +89,25 @@ describe("Phase 3 original relay schema", () => {
 });
 ```
 
+Final-review contract additions scope the fresh-table `user_id` assertion to `transfer_queue`, verify account-scoped RLS, assert server-owned insert/update timestamps, require both legacy preflights before mutation, and lock the path-aware status conversion plus rerunnable constraints.
+
 - [x] **Step 2: Verify RED**
 
 Run: `npm test -- --run supabase/schema.test.js`
 
 Expected: FAIL because the schema still uses `dest` and excludes `relay-originals`.
 
+Final-review RED: five contract tests fail for timestamp ownership, destination preflight, safe status conversion, shared-account migration, and account-scoped RLS.
+
 - [x] **Step 3: Implement the schema contract**
 
-Use explicit `source_owner`, `dest_owner`, `tmp_path`, `original_name`, `original_size`, `mime_type`, `status`, and `expires_at` columns. Add idempotent migration statements for existing local projects. Permit both temporary prefixes only when path segment two equals `auth.uid()`.
+Use `user_id`, explicit `source_owner`, `dest_owner`, `tmp_path`, `original_name`, `original_size`, `mime_type`, `status`, and `expires_at` columns. Add idempotent preflights and migration statements for existing local projects: refuse unsupported `dest` values, require exactly one shared auth account for legacy rows, backfill that account, and never promote a pathless legacy row to `uploaded`. Make insertion/expiry timestamps server-owned and scope transfer RLS to `user_id = auth.uid()`. Permit both temporary prefixes only when path segment two equals `auth.uid()`.
 
 - [x] **Step 4: Verify GREEN**
 
 Run: `npm test -- --run supabase/schema.test.js`
 
-Expected: PASS with 3 tests.
+Expected: PASS with 7 tests.
 
 ---
 
@@ -113,17 +119,19 @@ Expected: PASS with 3 tests.
 
 **Interfaces:**
 - Consumes: normalized upload item, prepared derivatives/hash, signed-in user, and `owner`.
-- Produces: `relayDestinationFor(owner)`, `buildRelayOriginalPath(userId, transferId, item)`, paired `inbox_items` and `transfer_queue` rows.
+- Produces: `relayDestinationFor(owner)`, `buildRelayOriginalPath(userId, transferId, item)`, paired `inbox_items` and account-scoped `transfer_queue` rows, and no persistence/progress/cleanup call when the relay upload itself fails.
 
 - [x] **Step 1: Write failing adapter tests**
 
-Extend the upload client double with table-aware insert errors, Storage `remove`, and table delete tracking. Assert a `bara` upload creates `dest_owner: "nyong"`, a `nyong` upload creates `dest_owner: "bara"`, expiry is `2026-07-02T01:02:03.000Z`, and failures remove the temporary object plus the inbox row when applicable.
+Extend the upload client double with table-aware insert errors, path-aware upload errors, Storage `remove`, and table delete tracking. Assert a `bara` upload creates `dest_owner: "nyong"`, a `nyong` upload creates `dest_owner: "bara"`, the transfer carries `user_id`, expiry is `2026-07-02T01:02:03.000Z`, and persistence failures remove the temporary object plus the inbox row when applicable. A relay upload failure must stop before database writes or progress and must not attempt Storage removal.
 
 - [x] **Step 2: Verify RED**
 
 Run: `npm test -- --run src/adapters/supabaseAdapter.test.js`
 
 Expected: FAIL because relay uploads, queue rows, and compensation do not exist.
+
+Final-review RED: the prepared transfer row lacks `user_id`, and the upload double cannot yet surface a relay-path-specific Storage failure.
 
 - [x] **Step 3: Implement minimal relay behavior**
 

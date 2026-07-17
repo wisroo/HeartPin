@@ -55,6 +55,7 @@ No new dependency or server component is required for the first implementation s
 
 ```text
 id
+user_id            authenticated shared-account user
 content_hash
 source_owner       bara | nyong
 dest_owner         bara | nyong, must differ from source_owner
@@ -63,12 +64,16 @@ original_name
 original_size
 mime_type
 status             uploaded | landed | deleted | failed
-expires_at         created_at + 7 days
-created_at
+expires_at         server-owned created_at + 7 days
+created_at         server-owned insertion time
 updated_at
 ```
 
-The first migration adds `source_owner` and `dest_owner`, copies any valid legacy `dest` values into `dest_owner`, derives the opposite source, and then removes `dest`. It also replaces the legacy status constraint with the states above. Every schema statement must tolerate repeated local Supabase setup.
+Fresh tables require `user_id` as a foreign key to `auth.users(id)`, and transfer RLS permits rows only when `user_id = auth.uid()`. Existing-table migration first refuses unsupported legacy `dest` values instead of silently mapping or deleting them. If legacy rows need a `user_id`, migration requires exactly one `auth.users` row and backfills that fixed shared account; an existing empty table receives rerunnable `NOT VALID` not-null and foreign-key constraints so future writes are enforced without requiring a legacy backfill.
+
+For legacy status conversion, only `queued` rows with a non-empty `tmp_path` become `uploaded`. A `queued` or `uploaded` row without a usable path becomes `failed`, and a rerunnable check prevents future pathless `uploaded` rows. Valid `bara`/`nyong` destinations still backfill `dest_owner`, the opposite source is derived, and then the legacy `dest` column is removed. Every schema statement must tolerate repeated local Supabase setup.
+
+The expiry trigger owns retention timestamps: inserts overwrite any client `created_at` with database `now()` and derive `expires_at` from it; updates preserve both stored values regardless of the payload. Source-contract tests cover these rules, but runtime migration and live RLS behavior remain Local-only verification gates.
 
 `photo_copies` keeps its current unique identity `(content_hash, location, owner)` and uses `status = 'present'` after the recipient confirms a successful save. Initial recipient locations are `bara_phone`, `nyong_phone`, and `personal_pc`. The first implementation slice does not write `photo_copies`; it only creates the transfer.
 
@@ -89,7 +94,7 @@ For each prepared item:
 3. Upload display and thumb to their permanent hash paths.
 4. Upload original bytes to the private `relay-originals` path.
 5. Insert the normal `inbox_items` row.
-6. Insert an `uploaded` `transfer_queue` row with a seven-day expiry.
+6. Insert an `uploaded` `transfer_queue` row scoped to the authenticated `user_id`; the database owns its creation time and seven-day expiry.
 7. Return the same upload result shape currently consumed by Web and Mobile shells.
 
 If the temporary-original upload fails, do not create the inbox or transfer rows. If the inbox insert fails, best-effort delete the temporary original. If the transfer insert fails after the inbox insert, best-effort delete both the inbox row and temporary original, then surface an upload error. Permanent derivative cleanup remains the already-documented orphan cleanup follow-up; this slice must not silently report success without a transfer row.
