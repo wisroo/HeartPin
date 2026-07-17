@@ -6,9 +6,6 @@ const leafletSpies = vi.hoisted(() => ({
   fitBounds: vi.fn(),
   setView: vi.fn(),
   polyline: vi.fn(),
-  handlers: {},
-  container: null,
-  zoom: 8,
 }));
 
 vi.mock("leaflet", () => {
@@ -18,20 +15,12 @@ vi.mock("leaflet", () => {
   });
   return {
     default: {
-      map: () => {
-        leafletSpies.container = document.createElement("div");
-        leafletSpies.handlers = {};
-        return ({
+      map: () => ({
         fitBounds: leafletSpies.fitBounds,
         setView: leafletSpies.setView,
-        getContainer: () => leafletSpies.container,
-        getZoom: () => leafletSpies.zoom,
-        on(name, handler) { leafletSpies.handlers[name] = handler; return this; },
-        off(name) { delete leafletSpies.handlers[name]; return this; },
         invalidateSize() { return this; },
         remove() {},
-        });
-      },
+      }),
       tileLayer: layer,
       layerGroup: () => ({ addTo() { return this; }, clearLayers() {} }),
       marker: layer,
@@ -117,7 +106,6 @@ test("draws a soft rounded dotted curve through the trip", () => {
       onSelectSpot={() => {}}
       onOpenSpot={() => {}}
       onBack={() => {}}
-      onZoomOutToOverview={() => {}}
       settings={{ showChars: false }}
     />
   );
@@ -132,27 +120,4 @@ test("draws a soft rounded dotted curve through the trip", () => {
     lineCap: "round",
     lineJoin: "round",
   });
-});
-
-test("user zoom-out at level 8 requests the all-trips overview", () => {
-  const onZoomOutToOverview = vi.fn();
-  render(
-    <MobileTripMap
-      trip={trip}
-      selectedDayId={null}
-      selectedSpotId="sea"
-      onSelectDay={() => {}}
-      onSelectSpot={() => {}}
-      onOpenSpot={() => {}}
-      onBack={() => {}}
-      onZoomOutToOverview={onZoomOutToOverview}
-      settings={{ showChars: false }}
-    />
-  );
-
-  leafletSpies.zoom = 9;
-  leafletSpies.container.dispatchEvent(new Event("wheel"));
-  leafletSpies.zoom = 8;
-  leafletSpies.handlers.zoomend?.();
-  expect(onZoomOutToOverview).toHaveBeenCalledOnce();
 });

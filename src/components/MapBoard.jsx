@@ -2,11 +2,10 @@
 import { useRef, useEffect } from "react";
 import L from "leaflet";
 import { TILES, ATTR, smooth, pinIcon, charIcon, tripIcon } from "../mapUtil.js";
-import { bindSemanticZoomOut } from "../mapSemanticZoom.js";
 import { ordered } from "../data.js";
 
 export default function MapBoard(props) {
-  const { region, view, trips, trip, tripId, spotIndex, onSelectTrip, onSelectSpot, onZoomOutToOverview, skin = "cozy", showChars = true } = props;
+  const { region, view, trips, trip, tripId, spotIndex, onSelectTrip, onSelectSpot, skin = "cozy", showChars = true } = props;
   const elRef = useRef(null), mapRef = useRef(null), layerRef = useRef(null);
 
   // init
@@ -24,12 +23,6 @@ export default function MapBoard(props) {
     ro.observe(elRef.current);
     return () => { ro.disconnect(); map.remove(); mapRef.current = null; };
   }, []);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || view !== "trip" || !onZoomOutToOverview) return undefined;
-    return bindSemanticZoomOut(map, onZoomOutToOverview);
-  }, [onZoomOutToOverview, view]);
 
   // camera: fit on view/region/trip change (not on every card flip)
   useEffect(() => {

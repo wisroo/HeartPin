@@ -216,22 +216,6 @@ The Mobile route passes three-or-more points through `smooth(route, 16)`. A two-
 
 Focused tests assert both the smoothed coordinates and the stroke options. Local Mobile browser validation checks that the route remains visible over tiles without overpowering markers. Physical-device display and touch behavior remain Local-only.
 
-## Cross-Shell Semantic Zoom-Out Amendment
-
-While viewing one selected trip on Mobile or Web, a user-driven zoom-out returns to the all-trips overview once the map reaches zoom level 8 or lower. This treats map scale as navigation: close scale shows Days and spots, while broad scale shows trips.
-
-Considered approaches:
-
-1. Automatically return to the existing overview after a user crosses the zoom threshold — selected because it matches the requested gesture and reuses the coordinator's current `backToOverview` transition.
-2. Reveal an `전체 여행 보기` button below the threshold — safer against accidental transitions, but adds a redundant confirmation step.
-3. Keep one Leaflet instance and progressively replace the route with all trip markers — visually continuous, but couples overview and detail layers and expands this refinement beyond its required scope.
-
-One shared helper owns Leaflet user-zoom intent and threshold detection. `MobileTripMap` receives an `onZoomOutToOverview` callback from `MobileMapScreen`, while Web `MapBoard` receives the existing `app.back` callback through `MapShell`. Each shell therefore clears its own selected state through the same path as its visible back control.
-
-Programmatic camera changes must never trigger the transition. The shared helper arms only from explicit user zoom intent: wheel/trackpad input, a two-finger touch gesture, or the Web zoom-out control. A `zoomend` handler calls the supplied overview callback only when that intent is armed and `map.getZoom() <= 8`. Route and Day `fitBounds` calls never arm the helper. If the initial fitted route is already at a broad scale, it remains visible until the user performs a later zoom-out gesture.
-
-Focused tests cover the threshold, unarmed programmatic zooms, and both shell callbacks. Local browser validation covers Mobile and Web trip entry, manual zoom-out, overview restoration, and subsequent trip reselection. Physical-device pinch behavior remains Local-only.
-
 ## Scope
 
 Included:
@@ -248,7 +232,8 @@ Excluded:
 - recipient-original download UI;
 - Supabase schema simplification;
 - upload grouping changes;
-- Web map redesign beyond the shared semantic zoom-out behavior;
+- automatic semantic zoom navigation, rolled back after user validation failed;
+- Web map redesign;
 - native camera-roll features;
 - new clustering libraries;
 - live-device or browser-permission claims.

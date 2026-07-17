@@ -1,9 +1,9 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 
 vi.mock("../../components/MapBoard.jsx", () => ({
   default: ({ onZoomOutToOverview }) => (
-    <button onClick={() => onZoomOutToOverview?.()}>Web 지도 축소</button>
+    <div>{onZoomOutToOverview ? "semantic zoom enabled" : "semantic zoom disabled"}</div>
   ),
 }));
 vi.mock("../../components/Rnb.jsx", () => ({ default: () => <div>여행 패널</div> }));
@@ -11,7 +11,7 @@ vi.mock("../../components/Gallery.jsx", () => ({ default: () => null }));
 
 import MapShell from "./MapShell.jsx";
 
-test("Web semantic zoom uses the existing app back transition", () => {
+test("Web map keeps automatic semantic zoom disabled", () => {
   const app = {
     back: vi.fn(),
     openHome: () => {},
@@ -29,6 +29,6 @@ test("Web semantic zoom uses the existing app back transition", () => {
   };
   render(<MapShell app={app} />);
 
-  fireEvent.click(screen.getByRole("button", { name: "Web 지도 축소" }));
-  expect(app.back).toHaveBeenCalledOnce();
+  expect(screen.getByText("semantic zoom disabled")).toBeInTheDocument();
+  expect(app.back).not.toHaveBeenCalled();
 });

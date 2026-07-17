@@ -19,7 +19,7 @@ vi.mock("./MobileTripMap.jsx", () => ({
       <div>선택 스팟 {selectedSpotId}</div>
       <button onClick={() => onSelectDay("d2")}>mock Day 2</button>
       <button onClick={onBack}>trip back</button>
-      <button onClick={onZoomOutToOverview}>zoom out</button>
+      {onZoomOutToOverview && <button onClick={onZoomOutToOverview}>zoom out</button>}
       <button onClick={() => onOpenSpot(trip.days[0].spots[0])}>moment open</button>
     </div>
   ),
@@ -48,12 +48,12 @@ test("selecting a trip opens that trip, then back returns to overview", () => {
   expect(screen.getByText("전체 여행 2개")).toBeInTheDocument();
 });
 
-test("semantic zoom-out returns a selected trip to overview", () => {
+test("automatic semantic zoom remains disabled in a selected trip", () => {
   render(<MobileMapScreen trips={trips} nav={{ back: () => {}, openMoment: () => {} }} settings={{}} />);
 
   fireEvent.click(screen.getByRole("button", { name: "부산" }));
-  fireEvent.click(screen.getByRole("button", { name: "zoom out" }));
-  expect(screen.getByText("전체 여행 2개")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "zoom out" })).not.toBeInTheDocument();
+  expect(screen.getByText("선택 여행 부산")).toBeInTheDocument();
 });
 
 test("Journey entry opens the requested trip and spot directly", () => {

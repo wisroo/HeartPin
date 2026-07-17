@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import { CHAR } from "../../../chars.js";
-import { bindSemanticZoomOut } from "../../../mapSemanticZoom.js";
 import { ATTR, smooth, TILES } from "../../../mapUtil.js";
 import TripDaysSheet from "./TripDaysSheet.jsx";
 import { locatedSpots, spotSequence, tripDayGroups } from "./mobileMapModel.js";
@@ -16,7 +15,6 @@ export default function MobileTripMap({
   onSelectSpot,
   onOpenSpot,
   onBack,
-  onZoomOutToOverview,
   settings = {},
 }) {
   const mapElRef = useRef(null);
@@ -36,18 +34,14 @@ export default function MobileTripMap({
     L.tileLayer(TILES, { attribution: ATTR, subdomains: "abcd", maxZoom: 19 }).addTo(map);
     mapRef.current = map;
     layersRef.current = L.layerGroup().addTo(map);
-    const unbindSemanticZoom = onZoomOutToOverview
-      ? bindSemanticZoomOut(map, onZoomOutToOverview)
-      : () => {};
     map.invalidateSize();
 
     return () => {
-      unbindSemanticZoom();
       map.remove();
       mapRef.current = null;
       layersRef.current = null;
     };
-  }, [onZoomOutToOverview]);
+  }, []);
 
   useEffect(() => {
     const map = mapRef.current;
