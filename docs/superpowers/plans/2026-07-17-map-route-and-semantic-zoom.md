@@ -8,6 +8,19 @@
 
 **Tech Stack:** React 19, Leaflet, Vitest, Testing Library, Vite.
 
+**Status (2026-07-17):** Implementation commit `93dd4fd` exists, but user validation failed on both Web and Mobile. Semantic zoom-out remains an open bug and this plan is not complete.
+
+## Open Bug: Selected trip does not return to the trips overview
+
+- **Reported:** 2026-07-17, after commit `93dd4fd`.
+- **Affected surfaces:** Web map and Mobile map.
+- **Reproduction:** Open the all-trips map, select one trip, then zoom out repeatedly with the map's normal zoom interaction.
+- **Expected:** At Leaflet zoom level 8 or lower, the selected-trip view returns to the all-trips overview.
+- **Actual:** The selected-trip view remains open on both Web and Mobile in the user's local browser.
+- **Current evidence:** Unit/integration tests pass and one automated browser-control path transitioned successfully, but that path does not represent the user's failing interaction reliably enough to close the bug.
+- **Temporary workaround:** Use the explicit back/`전체 여정` navigation instead of relying on zoom-out.
+- **Next investigation:** Reproduce the exact user gesture path, capture real Leaflet `zoomstart`/`zoomend` values and DOM input events, and add a regression test for the confirmed runtime failure before changing implementation again.
+
 ## Global Constraints
 
 - Use zoom level 8 as the cross-shell overview threshold.
@@ -78,5 +91,5 @@
 - [x] **Step 2: Run** `npm run build`; expect a successful Vite production build.
 - [x] **Step 3: Run** `git diff --check`; expect no output.
 - [x] **Step 4: Review** the final diff for listener cleanup, duplicate transitions, Web/Mobile shell isolation, and unrelated changes.
-- [x] **Step 5: Validate locally** at Mobile and Web widths: enter a trip, zoom out to level 8 or lower, confirm overview restoration, re-enter the trip, and verify programmatic fit does not auto-exit.
+- [ ] **Step 5: Revalidate locally** at Mobile and Web widths. Reopened after the user reported that both surfaces remain in trip detail when zooming out.
 - [x] **Step 6: Record** that physical-device pinch behavior remains Local-only, then commit the scoped change with an English Conventional Commit message.
