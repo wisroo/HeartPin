@@ -3,6 +3,7 @@ import { createBrowserUploadPreparer } from "./supabaseUploadPrep.js";
 
 const PHOTOS_BUCKET = "photos";
 const SIGNED_URL_SECONDS = 60 * 60;
+const RELAY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const EDITABLE_SPOT_FIELDS = new Set(["name", "time", "mood", "guide", "reaction"]);
 
 function emptyState() {
@@ -46,6 +47,16 @@ export function buildTestOriginalPath(userId, uploadSessionId, item, index = 0) 
   const ext = extensionFor(item);
   const prefix = String(index + 1).padStart(3, "0");
   return `test-originals/${userId}/${uploadSessionId}/${prefix}-${safeBaseName(item.name || item.file?.name)}.${ext}`;
+}
+
+export function relayDestinationFor(owner) {
+  if (owner === "bara") return "nyong";
+  if (owner === "nyong") return "bara";
+  throw new Error("사진 owner는 bara 또는 nyong이어야 해요");
+}
+
+export function buildRelayOriginalPath(userId, transferId, item) {
+  return `relay-originals/${userId}/${transferId}/${safeBaseName(item.name || item.file?.name)}.${extensionFor(item)}`;
 }
 
 function normalizeUploadItem(item) {
@@ -107,6 +118,22 @@ async function deleteByIds(client, table, ids, message) {
     await client.from(table).delete().in("id", ids),
     message,
   );
+}
+
+async function removeStoragePathBestEffort(storage, path) {
+  try {
+    await storage.remove([path]);
+  } catch {
+    // Preserve the persistence error that triggered compensation.
+  }
+}
+
+async function deleteInboxRowBestEffort(client, id) {
+  try {
+    await client.from("inbox_items").delete().eq("id", id);
+  } catch {
+    // Preserve the transfer error that triggered compensation.
+  }
 }
 
 function normalizeIds(ids) {
@@ -431,12 +458,17 @@ export function createSupabaseAdapter({ client = createSupabaseClient(), prepare
       const rows = [];
       const added = [];
       const storage = client.storage.from(PHOTOS_BUCKET);
+      const relayDestination = prepareUploadItem ? relayDestinationFor(owner) : null;
 
       for (let i = 0; i < normalized.length; i += 1) {
         const item = normalized[i];
         if (prepareUploadItem) {
           const prepared = await prepareUploadItem(item, i);
           const { displayPath, thumbPath } = uploadPathsForHash(prepared.contentHash);
+          const transferId = `tr_${prepared.contentHash}`;
+          const relayPath = buildRelayOriginalPath(user.id, transferId, item);
+          const originalBody = item.bytes || item.file;
+          const originalMimeType = item.mimeType || item.file?.type || "application/octet-stream";
           assertSupabaseOk(
             await storage.upload(displayPath, prepared.display.body, {
               contentType: prepared.display.contentType || "image/webp",
@@ -451,6 +483,13 @@ export function createSupabaseAdapter({ client = createSupabaseClient(), prepare
             }),
             "Supabase thumb 업로드 실패",
           );
+          assertSupabaseOk(
+            await storage.upload(relayPath, originalBody, {
+              contentType: originalMimeType,
+              upsert: false,
+            }),
+            "Supabase relay original 업로드 실패",
+          );
 
           const displaySigned = assertSupabaseOk(
             await storage.createSignedUrl(displayPath, SIGNED_URL_SECONDS),
@@ -461,7 +500,38 @@ export function createSupabaseAdapter({ client = createSupabaseClient(), prepare
             "Supabase thumb signed URL 생성 실패",
           );
           const row = inboxRowFromPrepared(prepared, item, owner);
-          rows.push(row);
+          try {
+            assertSupabaseOk(
+              await client.from("inbox_items").insert([row]),
+              "Supabase inbox_items 기록 실패",
+            );
+          } catch (error) {
+            await removeStoragePathBestEffort(storage, relayPath);
+            throw error;
+          }
+
+          try {
+            assertSupabaseOk(
+              await client.from("transfer_queue").insert([{
+                id: transferId,
+                content_hash: prepared.contentHash,
+                source_owner: owner,
+                dest_owner: relayDestination,
+                tmp_path: relayPath,
+                original_name: prepared.originalName || item.name || item.file?.name || "photo",
+                original_size: prepared.originalSize || item.size || item.file?.size || null,
+                mime_type: originalMimeType,
+                status: "uploaded",
+                expires_at: new Date(Date.now() + RELAY_TTL_MS).toISOString(),
+              }]),
+              "Supabase transfer_queue 기록 실패",
+            );
+          } catch (error) {
+            await deleteInboxRowBestEffort(client, row.id);
+            await removeStoragePathBestEffort(storage, relayPath);
+            throw error;
+          }
+
           added.push({
             id: row.id,
             kind: row.kind,
