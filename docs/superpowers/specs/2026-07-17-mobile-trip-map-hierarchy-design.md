@@ -202,6 +202,20 @@ git diff --check
 
 Manual browser verification covers Mobile viewport sheet animation, map camera movement, marker/card synchronization, and touch scrolling. Automated checks must not claim those visual interactions were verified on a physical device.
 
+## Route Stroke Amendment
+
+The selected-trip route uses the same soft visual language as the Web map instead of a heavy straight solid line.
+
+Considered approaches:
+
+1. Reuse the shared `smooth()` Catmull-Rom helper and draw one rounded dotted stroke — selected because it aligns Web and Mobile with the smallest change.
+2. Keep straight segments and change only dash/cap styling — simpler, but sharp corners still read as mechanical connectors.
+3. Layer multiple jittered strokes for a hand-drawn effect — rejected because it reduces map clarity and adds unnecessary rendering complexity.
+
+The Mobile route passes three-or-more points through `smooth(route, 16)`. A two-point route stays a straight segment because there is no intermediate direction from which to derive a meaningful curve. Leaflet renders the result with the existing warm route color, `weight: 2.5`, `opacity: 0.38`, `dashArray: "1 10"`, `lineCap: "round"`, and `lineJoin: "round"`. This produces separated round ink dots along a soft curve without adding a second layer or a new dependency.
+
+Focused tests assert both the smoothed coordinates and the stroke options. Local Mobile browser validation checks that the route remains visible over tiles without overpowering markers. Physical-device display and touch behavior remain Local-only.
+
 ## Scope
 
 Included:
