@@ -483,14 +483,6 @@ export function createSupabaseAdapter({ client = createSupabaseClient(), prepare
             }),
             "Supabase thumb 업로드 실패",
           );
-          assertSupabaseOk(
-            await storage.upload(relayPath, originalBody, {
-              contentType: originalMimeType,
-              upsert: false,
-            }),
-            "Supabase relay original 업로드 실패",
-          );
-
           const displaySigned = assertSupabaseOk(
             await storage.createSignedUrl(displayPath, SIGNED_URL_SECONDS),
             "Supabase display signed URL 생성 실패",
@@ -498,6 +490,13 @@ export function createSupabaseAdapter({ client = createSupabaseClient(), prepare
           const thumbSigned = assertSupabaseOk(
             await storage.createSignedUrl(thumbPath, SIGNED_URL_SECONDS),
             "Supabase thumb signed URL 생성 실패",
+          );
+          assertSupabaseOk(
+            await storage.upload(relayPath, originalBody, {
+              contentType: originalMimeType,
+              upsert: false,
+            }),
+            "Supabase relay original 업로드 실패",
           );
           const row = inboxRowFromPrepared(prepared, item, owner);
           try {
@@ -597,10 +596,9 @@ export function createSupabaseAdapter({ client = createSupabaseClient(), prepare
       }
 
       if (rows.length) {
-        const table = prepareUploadItem ? "inbox_items" : "test_uploads";
         assertSupabaseOk(
-          await client.from(table).insert(rows),
-          prepareUploadItem ? "Supabase inbox_items 기록 실패" : "Supabase test_uploads 기록 실패",
+          await client.from("test_uploads").insert(rows),
+          "Supabase test_uploads 기록 실패",
         );
       }
 

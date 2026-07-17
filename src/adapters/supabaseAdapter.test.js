@@ -6,6 +6,11 @@ function makeUploadClient({
   uploadError = null,
   insertError = null,
   insertErrors = {},
+  signedUrlErrors = {},
+  removeError = null,
+  removeReject = null,
+  deleteError = null,
+  deleteReject = null,
 } = {}) {
   const operations = [];
   const uploads = [];
@@ -18,9 +23,13 @@ function makeUploadClient({
   });
   const remove = vi.fn((paths) => {
     operations.push({ type: "remove", paths });
-    return Promise.resolve({ data: null, error: null });
+    if (removeReject) return Promise.reject(removeReject);
+    return Promise.resolve({ data: null, error: removeError });
   });
-  const createSignedUrl = vi.fn().mockResolvedValue({ data: { signedUrl: "https://signed.example/photo.jpg" }, error: null });
+  const createSignedUrl = vi.fn((path) => Promise.resolve({
+    data: { signedUrl: "https://signed.example/photo.jpg" },
+    error: signedUrlErrors[path] || null,
+  }));
   const insert = vi.fn();
   return {
     auth: {
@@ -40,7 +49,8 @@ function makeUploadClient({
         eq: vi.fn((column, value) => {
           deletes.push({ table, column, value });
           operations.push({ type: "delete", table, column, value });
-          return Promise.resolve({ data: null, error: null });
+          if (deleteReject) return Promise.reject(deleteReject);
+          return Promise.resolve({ data: null, error: deleteError });
         }),
       })),
     })),
@@ -860,6 +870,37 @@ describe("supabaseAdapter.uploadPhotos", () => {
     expect(onProgress).toHaveBeenLastCalledWith(1);
   });
 
+  it.each([
+    {
+      path: "display/hash-123.webp",
+      message: "Supabase display signed URL 생성 실패: signing unavailable",
+    },
+    {
+      path: "thumb/hash-123.webp",
+      message: "Supabase thumb signed URL 생성 실패: signing unavailable",
+    },
+  ])("does not upload a relay original when signing $path fails", async ({ path, message }) => {
+    const client = makeUploadClient({
+      signedUrlErrors: {
+        [path]: { message: "signing unavailable" },
+      },
+    });
+    const adapter = createSupabaseAdapter({
+      client,
+      prepareUploadItem: vi.fn().mockResolvedValue(preparedUpload()),
+    });
+
+    await expect(adapter.uploadPhotos([
+      new File([new Uint8Array([1, 2, 3])], "gps.jpg", { type: "image/jpeg" }),
+    ], "bara")).rejects.toThrow(message);
+
+    expect(client.spies.uploads.map(({ path }) => path)).toEqual([
+      "display/hash-123.webp",
+      "thumb/hash-123.webp",
+    ]);
+    expect(client.spies.inserts).toEqual([]);
+  });
+
   it("uploads prepared derivatives and a seven-day original relay from bara to nyong", async () => {
     const client = makeUploadClient();
     const prepareUploadItem = vi.fn().mockResolvedValue(preparedUpload());
@@ -980,6 +1021,25 @@ describe("supabaseAdapter.uploadPhotos", () => {
     expect(onProgress).not.toHaveBeenCalled();
   });
 
+  it("preserves the inbox insert error when relay removal rejects", async () => {
+    const client = makeUploadClient({
+      insertErrors: { inbox_items: { message: "inbox unavailable" } },
+      removeReject: new Error("remove rejected"),
+    });
+    const adapter = createSupabaseAdapter({
+      client,
+      prepareUploadItem: vi.fn().mockResolvedValue(preparedUpload()),
+    });
+
+    await expect(adapter.uploadPhotos([
+      new File([new Uint8Array([1, 2, 3])], "gps.jpg", { type: "image/jpeg" }),
+    ], "bara")).rejects.toThrow("Supabase inbox_items 기록 실패: inbox unavailable");
+
+    expect(client.spies.remove).toHaveBeenCalledWith([
+      "relay-originals/user-123/tr_hash-123/gps.jpg",
+    ]);
+  });
+
   it("deletes the inbox row and relay original when the transfer insert fails", async () => {
     const client = makeUploadClient({
       insertErrors: { transfer_queue: { message: "transfer unavailable" } },
@@ -1003,5 +1063,49 @@ describe("supabaseAdapter.uploadPhotos", () => {
       "relay-originals/user-123/tr_hash-123/gps.jpg",
     ]);
     expect(onProgress).not.toHaveBeenCalled();
+  });
+
+  it("preserves the transfer insert error when cleanup returns errors", async () => {
+    const client = makeUploadClient({
+      insertErrors: { transfer_queue: { message: "transfer unavailable" } },
+      deleteError: { message: "delete unavailable" },
+      removeError: { message: "remove unavailable" },
+    });
+    const adapter = createSupabaseAdapter({
+      client,
+      prepareUploadItem: vi.fn().mockResolvedValue(preparedUpload()),
+    });
+
+    await expect(adapter.uploadPhotos([
+      new File([new Uint8Array([1, 2, 3])], "gps.jpg", { type: "image/jpeg" }),
+    ], "bara")).rejects.toThrow("Supabase transfer_queue 기록 실패: transfer unavailable");
+
+    expect(client.spies.deletes).toEqual([{
+      table: "inbox_items",
+      column: "id",
+      value: "ib_hash-123",
+    }]);
+    expect(client.spies.remove).toHaveBeenCalledWith([
+      "relay-originals/user-123/tr_hash-123/gps.jpg",
+    ]);
+  });
+
+  it("preserves the transfer insert error and continues cleanup when inbox deletion rejects", async () => {
+    const client = makeUploadClient({
+      insertErrors: { transfer_queue: { message: "transfer unavailable" } },
+      deleteReject: new Error("delete rejected"),
+    });
+    const adapter = createSupabaseAdapter({
+      client,
+      prepareUploadItem: vi.fn().mockResolvedValue(preparedUpload()),
+    });
+
+    await expect(adapter.uploadPhotos([
+      new File([new Uint8Array([1, 2, 3])], "gps.jpg", { type: "image/jpeg" }),
+    ], "bara")).rejects.toThrow("Supabase transfer_queue 기록 실패: transfer unavailable");
+
+    expect(client.spies.remove).toHaveBeenCalledWith([
+      "relay-originals/user-123/tr_hash-123/gps.jpg",
+    ]);
   });
 });
