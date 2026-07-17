@@ -108,14 +108,83 @@ on public.photo_copies (content_hash, location, coalesce(owner, 'shared'));
 create table if not exists public.transfer_queue (
   id text primary key default gen_random_uuid()::text,
   content_hash text not null,
-  dest text not null,
+  source_owner text not null
+    constraint transfer_queue_source_owner_check check (source_owner in ('bara', 'nyong')),
+  dest_owner text not null
+    constraint transfer_queue_dest_owner_check check (dest_owner in ('bara', 'nyong')),
   tmp_path text,
-  status text not null default 'queued'
-    check (status in ('queued', 'uploaded', 'landed', 'deleted', 'failed')),
+  original_name text not null,
+  original_size bigint,
+  mime_type text,
+  status text not null default 'uploaded'
+    constraint transfer_queue_status_check check (status in ('uploaded', 'landed', 'deleted', 'failed')),
   expires_at timestamptz,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint transfer_queue_distinct_owners check (source_owner <> dest_owner)
 );
+
+alter table public.transfer_queue add column if not exists source_owner text;
+alter table public.transfer_queue add column if not exists dest_owner text;
+alter table public.transfer_queue add column if not exists original_name text;
+alter table public.transfer_queue add column if not exists original_size bigint;
+alter table public.transfer_queue add column if not exists mime_type text;
+
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'transfer_queue'
+      and column_name = 'dest'
+  ) then
+    execute $migration$
+      update public.transfer_queue
+      set dest_owner = dest
+      where dest_owner is null
+        and dest in ('bara', 'nyong')
+    $migration$;
+  end if;
+end;
+$$;
+
+update public.transfer_queue
+set source_owner = case dest_owner
+  when 'bara' then 'nyong'
+  when 'nyong' then 'bara'
+end
+where source_owner is null;
+
+update public.transfer_queue
+set original_name = coalesce(
+  nullif(regexp_replace(tmp_path, '^.*/', ''), ''),
+  content_hash
+)
+where original_name is null;
+
+update public.transfer_queue
+set status = 'uploaded'
+where status = 'queued';
+
+alter table public.transfer_queue alter column source_owner set not null;
+alter table public.transfer_queue alter column dest_owner set not null;
+alter table public.transfer_queue alter column original_name set not null;
+alter table public.transfer_queue alter column status set default 'uploaded';
+
+alter table public.transfer_queue drop constraint if exists transfer_queue_source_owner_check;
+alter table public.transfer_queue add constraint transfer_queue_source_owner_check
+  check (source_owner in ('bara', 'nyong'));
+alter table public.transfer_queue drop constraint if exists transfer_queue_dest_owner_check;
+alter table public.transfer_queue add constraint transfer_queue_dest_owner_check
+  check (dest_owner in ('bara', 'nyong'));
+alter table public.transfer_queue drop constraint if exists transfer_queue_distinct_owners;
+alter table public.transfer_queue add constraint transfer_queue_distinct_owners
+  check (source_owner <> dest_owner);
+alter table public.transfer_queue drop constraint if exists transfer_queue_status_check;
+alter table public.transfer_queue add constraint transfer_queue_status_check
+  check (status in ('uploaded', 'landed', 'deleted', 'failed'));
+alter table public.transfer_queue drop column if exists dest;
 
 create table if not exists public.test_uploads (
   id text primary key default gen_random_uuid()::text,
@@ -224,7 +293,7 @@ create policy "authenticated read photos" on storage.objects
     and (
       (storage.foldername(name))[1] in ('display', 'thumb')
       or (
-        (storage.foldername(name))[1] = 'test-originals'
+        (storage.foldername(name))[1] in ('test-originals', 'relay-originals')
         and (storage.foldername(name))[2] = (select auth.uid()::text)
       )
     )
@@ -236,7 +305,7 @@ create policy "authenticated write photos" on storage.objects
     and (
       (storage.foldername(name))[1] in ('display', 'thumb')
       or (
-        (storage.foldername(name))[1] = 'test-originals'
+        (storage.foldername(name))[1] in ('test-originals', 'relay-originals')
         and (storage.foldername(name))[2] = (select auth.uid()::text)
       )
     )
@@ -248,7 +317,7 @@ create policy "authenticated update photos" on storage.objects
     and (
       (storage.foldername(name))[1] in ('display', 'thumb')
       or (
-        (storage.foldername(name))[1] = 'test-originals'
+        (storage.foldername(name))[1] in ('test-originals', 'relay-originals')
         and (storage.foldername(name))[2] = (select auth.uid()::text)
       )
     )
@@ -257,7 +326,7 @@ create policy "authenticated update photos" on storage.objects
     and (
       (storage.foldername(name))[1] in ('display', 'thumb')
       or (
-        (storage.foldername(name))[1] = 'test-originals'
+        (storage.foldername(name))[1] in ('test-originals', 'relay-originals')
         and (storage.foldername(name))[2] = (select auth.uid()::text)
       )
     )
@@ -267,7 +336,7 @@ create policy "authenticated delete photos" on storage.objects
   for delete to authenticated using (
     bucket_id = 'photos'
     and (
-      (storage.foldername(name))[1] = 'test-originals'
+      (storage.foldername(name))[1] in ('test-originals', 'relay-originals')
       and (storage.foldername(name))[2] = (select auth.uid()::text)
     )
   );
