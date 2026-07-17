@@ -118,7 +118,7 @@ create table if not exists public.transfer_queue (
   mime_type text,
   status text not null default 'uploaded'
     constraint transfer_queue_status_check check (status in ('uploaded', 'landed', 'deleted', 'failed')),
-  expires_at timestamptz,
+  expires_at timestamptz not null default (now() + interval '7 days'),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint transfer_queue_distinct_owners check (source_owner <> dest_owner)
@@ -129,6 +129,7 @@ alter table public.transfer_queue add column if not exists dest_owner text;
 alter table public.transfer_queue add column if not exists original_name text;
 alter table public.transfer_queue add column if not exists original_size bigint;
 alter table public.transfer_queue add column if not exists mime_type text;
+alter table public.transfer_queue add column if not exists expires_at timestamptz;
 
 do $$
 begin
@@ -167,10 +168,16 @@ update public.transfer_queue
 set status = 'uploaded'
 where status = 'queued';
 
+update public.transfer_queue
+set expires_at = created_at + interval '7 days';
+
 alter table public.transfer_queue alter column source_owner set not null;
 alter table public.transfer_queue alter column dest_owner set not null;
 alter table public.transfer_queue alter column original_name set not null;
 alter table public.transfer_queue alter column status set default 'uploaded';
+alter table public.transfer_queue alter column expires_at set not null;
+alter table public.transfer_queue alter column expires_at
+  set default (now() + interval '7 days');
 
 alter table public.transfer_queue drop constraint if exists transfer_queue_source_owner_check;
 alter table public.transfer_queue add constraint transfer_queue_source_owner_check
@@ -214,6 +221,16 @@ begin
 end;
 $$;
 
+create or replace function public.set_transfer_queue_expiry()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.expires_at = new.created_at + interval '7 days';
+  return new;
+end;
+$$;
+
 drop trigger if exists touch_trips_updated_at on public.trips;
 create trigger touch_trips_updated_at before update on public.trips
 for each row execute function public.touch_updated_at();
@@ -241,6 +258,10 @@ for each row execute function public.touch_updated_at();
 drop trigger if exists touch_transfer_queue_updated_at on public.transfer_queue;
 create trigger touch_transfer_queue_updated_at before update on public.transfer_queue
 for each row execute function public.touch_updated_at();
+
+drop trigger if exists set_transfer_queue_expiry on public.transfer_queue;
+create trigger set_transfer_queue_expiry before insert or update on public.transfer_queue
+for each row execute function public.set_transfer_queue_expiry();
 
 drop trigger if exists touch_test_uploads_updated_at on public.test_uploads;
 create trigger touch_test_uploads_updated_at before update on public.test_uploads
@@ -293,8 +314,14 @@ create policy "authenticated read photos" on storage.objects
     and (
       (storage.foldername(name))[1] in ('display', 'thumb')
       or (
-        (storage.foldername(name))[1] in ('test-originals', 'relay-originals')
-        and (storage.foldername(name))[2] = (select auth.uid()::text)
+        (storage.foldername(name))[2] = (select auth.uid()::text)
+        and (
+          (storage.foldername(name))[1] = 'test-originals'
+          or (
+            (storage.foldername(name))[1] = 'relay-originals'
+            and array_length(storage.foldername(name), 1) = 3
+          )
+        )
       )
     )
   );
@@ -305,8 +332,14 @@ create policy "authenticated write photos" on storage.objects
     and (
       (storage.foldername(name))[1] in ('display', 'thumb')
       or (
-        (storage.foldername(name))[1] in ('test-originals', 'relay-originals')
-        and (storage.foldername(name))[2] = (select auth.uid()::text)
+        (storage.foldername(name))[2] = (select auth.uid()::text)
+        and (
+          (storage.foldername(name))[1] = 'test-originals'
+          or (
+            (storage.foldername(name))[1] = 'relay-originals'
+            and array_length(storage.foldername(name), 1) = 3
+          )
+        )
       )
     )
   );
@@ -317,8 +350,14 @@ create policy "authenticated update photos" on storage.objects
     and (
       (storage.foldername(name))[1] in ('display', 'thumb')
       or (
-        (storage.foldername(name))[1] in ('test-originals', 'relay-originals')
-        and (storage.foldername(name))[2] = (select auth.uid()::text)
+        (storage.foldername(name))[2] = (select auth.uid()::text)
+        and (
+          (storage.foldername(name))[1] = 'test-originals'
+          or (
+            (storage.foldername(name))[1] = 'relay-originals'
+            and array_length(storage.foldername(name), 1) = 3
+          )
+        )
       )
     )
   ) with check (
@@ -326,8 +365,14 @@ create policy "authenticated update photos" on storage.objects
     and (
       (storage.foldername(name))[1] in ('display', 'thumb')
       or (
-        (storage.foldername(name))[1] in ('test-originals', 'relay-originals')
-        and (storage.foldername(name))[2] = (select auth.uid()::text)
+        (storage.foldername(name))[2] = (select auth.uid()::text)
+        and (
+          (storage.foldername(name))[1] = 'test-originals'
+          or (
+            (storage.foldername(name))[1] = 'relay-originals'
+            and array_length(storage.foldername(name), 1) = 3
+          )
+        )
       )
     )
   );
@@ -336,7 +381,13 @@ create policy "authenticated delete photos" on storage.objects
   for delete to authenticated using (
     bucket_id = 'photos'
     and (
-      (storage.foldername(name))[1] in ('test-originals', 'relay-originals')
-      and (storage.foldername(name))[2] = (select auth.uid()::text)
+      (storage.foldername(name))[2] = (select auth.uid()::text)
+      and (
+        (storage.foldername(name))[1] = 'test-originals'
+        or (
+          (storage.foldername(name))[1] = 'relay-originals'
+          and array_length(storage.foldername(name), 1) = 3
+        )
+      )
     )
   );
