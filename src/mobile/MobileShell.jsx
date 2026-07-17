@@ -1,8 +1,8 @@
-import { useState, useRef } from "react";
+import { useMemo, useState, useRef } from "react";
 import { Ico } from "./ui/MobileAtoms.jsx";
 import JourneyScreen from "./screens/JourneyScreen.jsx";
 import TripDetail from "./screens/TripDetail.jsx";
-import MapScreen from "./screens/MapScreen.jsx";
+import MobileMapScreen from "./screens/map/MobileMapScreen.jsx";
 import InboxScreen from "./screens/InboxScreen.jsx";
 import ProfileScreen from "./screens/ProfileScreen.jsx";
 import MomentViewer from "./overlays/MomentViewer.jsx";
@@ -24,15 +24,14 @@ const detectPlatform = () =>
 export default function MobileShell({ app, settings, setSettings }) {
   const [tab, setTab] = useState("journey");
   const [detail, setDetail] = useState(null);
-  const [mapTrip, setMapTrip] = useState(null);
-  const [mapIdx, setMapIdx] = useState(0);
+  const [mapEntry, setMapEntry] = useState(null);
   const [overlays, setOverlays] = useState([]);
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
-  const allTrips = [
+  const allTrips = useMemo(() => [
     ...app.regions.domestic.trips,
     ...app.regions.intl.trips,
-  ];
+  ], [app.regions.domestic.trips, app.regions.intl.trips]);
 
   const push = (o) => setOverlays((s) => [...s, o]);
   const popOverlay = () => setOverlays((s) => s.slice(0, -1));
@@ -49,8 +48,7 @@ export default function MobileShell({ app, settings, setSettings }) {
     },
     openTrip: (trip) => setDetail(trip),
     openMap: (trip, idx) => {
-      setMapTrip(trip);
-      setMapIdx(idx || 0);
+      setMapEntry({ tripId: trip.id, spotIndex: idx || 0 });
       setDetail(null);
       setOverlays([]);
       setTab("map");
@@ -80,6 +78,7 @@ export default function MobileShell({ app, settings, setSettings }) {
     if (name === "__fab") return nav.openUpload();
     setDetail(null);
     setOverlays([]);
+    if (name === "map") setMapEntry(null);
     setTab(name);
   };
 
@@ -92,10 +91,11 @@ export default function MobileShell({ app, settings, setSettings }) {
     );
   else if (tab === "map")
     root = (
-      <MapScreen
-        key={(mapTrip || allTrips[0])?.id + ":" + mapIdx}
-        trip={mapTrip || allTrips[0]}
-        initialSpotIdx={mapIdx}
+      <MobileMapScreen
+        key={mapEntry ? `${mapEntry.tripId}:${mapEntry.spotIndex}` : "overview"}
+        trips={allTrips}
+        initialTripId={mapEntry?.tripId}
+        initialSpotIndex={mapEntry?.spotIndex}
         nav={{ ...nav, back: () => switchTab("journey") }}
         settings={settings}
       />

@@ -1,7 +1,7 @@
 # Mobile Trip Map Hierarchy Design
 
 Date: 2026-07-17
-Status: Draft, awaiting written-spec review
+Status: Implemented on `feature/mobile-trip-map-hierarchy`; awaiting user validation
 
 ## Goal
 
