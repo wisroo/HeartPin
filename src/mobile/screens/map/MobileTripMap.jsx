@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import { CHAR } from "../../../chars.js";
-import { ATTR, TILES } from "../../../mapUtil.js";
+import { bindSemanticZoomOut } from "../../../mapSemanticZoom.js";
+import { ATTR, smooth, TILES } from "../../../mapUtil.js";
 import TripDaysSheet from "./TripDaysSheet.jsx";
 import { locatedSpots, spotSequence, tripDayGroups } from "./mobileMapModel.js";
 
@@ -15,6 +16,7 @@ export default function MobileTripMap({
   onSelectSpot,
   onOpenSpot,
   onBack,
+  onZoomOutToOverview,
   settings = {},
 }) {
   const mapElRef = useRef(null);
@@ -34,14 +36,18 @@ export default function MobileTripMap({
     L.tileLayer(TILES, { attribution: ATTR, subdomains: "abcd", maxZoom: 19 }).addTo(map);
     mapRef.current = map;
     layersRef.current = L.layerGroup().addTo(map);
+    const unbindSemanticZoom = onZoomOutToOverview
+      ? bindSemanticZoomOut(map, onZoomOutToOverview)
+      : () => {};
     map.invalidateSize();
 
     return () => {
+      unbindSemanticZoom();
       map.remove();
       mapRef.current = null;
       layersRef.current = null;
     };
-  }, []);
+  }, [onZoomOutToOverview]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -62,7 +68,16 @@ export default function MobileTripMap({
     });
 
     const route = mapSpots.map((spot) => [spot.lat, spot.lng]);
-    if (route.length > 1) L.polyline(route, { color: "#e46f61", weight: 4, opacity: 0.72 }).addTo(layers);
+    if (route.length > 1) {
+      L.polyline(smooth(route, 16), {
+        color: "#e46f61",
+        weight: 2.5,
+        opacity: 0.38,
+        dashArray: "1 10",
+        lineCap: "round",
+        lineJoin: "round",
+      }).addTo(layers);
+    }
 
     const activeSpot = mapSpots.find((spot) => spot.id === selectedSpotId);
     if (activeSpot && settings.showChars) {

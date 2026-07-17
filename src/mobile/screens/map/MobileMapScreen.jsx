@@ -71,6 +71,7 @@ export default function MobileMapScreen({
       onSelectSpot={setSelectedSpotId}
       onOpenSpot={(spot) => nav.openMoment(spot, 0)}
       onBack={backToOverview}
+      onZoomOutToOverview={backToOverview}
       settings={settings}
     />
   );

@@ -12,13 +12,14 @@ vi.mock("./MobileMapOverview.jsx", () => ({
 }));
 
 vi.mock("./MobileTripMap.jsx", () => ({
-  default: ({ trip, selectedDayId, selectedSpotId, onSelectDay, onBack, onOpenSpot }) => (
+  default: ({ trip, selectedDayId, selectedSpotId, onSelectDay, onBack, onZoomOutToOverview, onOpenSpot }) => (
     <div>
       <div>선택 여행 {trip.title}</div>
       <div>선택 Day {selectedDayId || "전체"}</div>
       <div>선택 스팟 {selectedSpotId}</div>
       <button onClick={() => onSelectDay("d2")}>mock Day 2</button>
       <button onClick={onBack}>trip back</button>
+      <button onClick={onZoomOutToOverview}>zoom out</button>
       <button onClick={() => onOpenSpot(trip.days[0].spots[0])}>moment open</button>
     </div>
   ),
@@ -44,6 +45,14 @@ test("selecting a trip opens that trip, then back returns to overview", () => {
   fireEvent.click(screen.getByRole("button", { name: "제주" }));
   expect(screen.getByText("선택 여행 제주")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "trip back" }));
+  expect(screen.getByText("전체 여행 2개")).toBeInTheDocument();
+});
+
+test("semantic zoom-out returns a selected trip to overview", () => {
+  render(<MobileMapScreen trips={trips} nav={{ back: () => {}, openMoment: () => {} }} settings={{}} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "부산" }));
+  fireEvent.click(screen.getByRole("button", { name: "zoom out" }));
   expect(screen.getByText("전체 여행 2개")).toBeInTheDocument();
 });
 

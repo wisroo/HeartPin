@@ -5,6 +5,10 @@ import { beforeEach, expect, test, vi } from "vitest";
 const leafletSpies = vi.hoisted(() => ({
   fitBounds: vi.fn(),
   setView: vi.fn(),
+  polyline: vi.fn(),
+  handlers: {},
+  container: null,
+  zoom: 8,
 }));
 
 vi.mock("leaflet", () => {
@@ -14,16 +18,24 @@ vi.mock("leaflet", () => {
   });
   return {
     default: {
-      map: () => ({
+      map: () => {
+        leafletSpies.container = document.createElement("div");
+        leafletSpies.handlers = {};
+        return ({
         fitBounds: leafletSpies.fitBounds,
         setView: leafletSpies.setView,
+        getContainer: () => leafletSpies.container,
+        getZoom: () => leafletSpies.zoom,
+        on(name, handler) { leafletSpies.handlers[name] = handler; return this; },
+        off(name) { delete leafletSpies.handlers[name]; return this; },
         invalidateSize() { return this; },
         remove() {},
-      }),
+        });
+      },
       tileLayer: layer,
       layerGroup: () => ({ addTo() { return this; }, clearLayers() {} }),
       marker: layer,
-      polyline: layer,
+      polyline: (...args) => { leafletSpies.polyline(...args); return layer(); },
       divIcon: () => ({}),
     },
   };
@@ -79,4 +91,68 @@ test("a location-free Day remains inspectable and does not reuse another Day bou
   expect(screen.getByText(/선택한 Day에는 지도 핀이 없어요/)).toBeInTheDocument();
   expect(leafletSpies.fitBounds).not.toHaveBeenCalled();
   expect(leafletSpies.setView).toHaveBeenCalled();
+});
+
+test("draws a soft rounded dotted curve through the trip", () => {
+  const curvedTrip = {
+    id: "curve",
+    title: "곡선 여행",
+    days: [{
+      id: "curve-day",
+      label: "Day 1",
+      spots: [
+        { id: "one", name: "하나", lat: 35.1, lng: 129.1, photos: [] },
+        { id: "two", name: "둘", lat: 35.2, lng: 129.25, photos: [] },
+        { id: "three", name: "셋", lat: 35.3, lng: 129.2, photos: [] },
+      ],
+    }],
+  };
+
+  render(
+    <MobileTripMap
+      trip={curvedTrip}
+      selectedDayId={null}
+      selectedSpotId="one"
+      onSelectDay={() => {}}
+      onSelectSpot={() => {}}
+      onOpenSpot={() => {}}
+      onBack={() => {}}
+      onZoomOutToOverview={() => {}}
+      settings={{ showChars: false }}
+    />
+  );
+
+  const [coordinates, options] = leafletSpies.polyline.mock.calls[0];
+  expect(coordinates.length).toBeGreaterThan(curvedTrip.days[0].spots.length);
+  expect(options).toEqual({
+    color: "#e46f61",
+    weight: 2.5,
+    opacity: 0.38,
+    dashArray: "1 10",
+    lineCap: "round",
+    lineJoin: "round",
+  });
+});
+
+test("user zoom-out at level 8 requests the all-trips overview", () => {
+  const onZoomOutToOverview = vi.fn();
+  render(
+    <MobileTripMap
+      trip={trip}
+      selectedDayId={null}
+      selectedSpotId="sea"
+      onSelectDay={() => {}}
+      onSelectSpot={() => {}}
+      onOpenSpot={() => {}}
+      onBack={() => {}}
+      onZoomOutToOverview={onZoomOutToOverview}
+      settings={{ showChars: false }}
+    />
+  );
+
+  leafletSpies.zoom = 9;
+  leafletSpies.container.dispatchEvent(new Event("wheel"));
+  leafletSpies.zoom = 8;
+  leafletSpies.handlers.zoomend?.();
+  expect(onZoomOutToOverview).toHaveBeenCalledOnce();
 });

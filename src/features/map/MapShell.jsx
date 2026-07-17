@@ -36,6 +36,7 @@ export default function MapShell({ app, variant = "web" }) {
             showChars={SHOW_CHARS}
             onSelectTrip={app.enterTrip}
             onSelectSpot={app.goSpot}
+            onZoomOutToOverview={app.back}
           />
           {app.gallery && app.gallerySpot && (
             <Gallery
