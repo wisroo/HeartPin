@@ -1,6 +1,6 @@
 # HeartPin 개발 로드맵 & 아키텍처 결정 문서
 
-> 작성일: 2026-06-05 · **갱신: 2026-07-17 (자동 임시 원본 릴레이 생성 구현)** · 기준 코드: Web/Mobile dual shell + Phase 1B Supabase persistence + Phase 3 relay creation
+> 작성일: 2026-06-05 · **갱신: 2026-07-21 (상대방 원본 다운로드 adapter 구현)** · 기준 코드: Web/Mobile dual shell + Phase 1B Supabase persistence + Phase 3 relay creation/recipient adapter
 >
 > **문서 목적**: 백엔드 개발 범주·단계, 모바일 개선 단계, 저장/전송(클라우드·외장하드) 논의와 결정을 기록한다.
 > MVP(1단계) 범위를 확정하고, 나머지는 추후 개발이 용이하도록 로드맵과 논의 근거를 남긴다.
@@ -229,7 +229,7 @@ transfer_queue(id, user_id, content_hash, source_owner, dest_owner, tmp_path,
 | 작업 | 내용 | 공수 |
 |---|---|---|
 | 3-1. 자동 임시 원본 릴레이 | **구현됨(자동 검증 완료, 실환경 검증 대기)** — 기록 업로드에서 display/thumb과 함께 원본을 private `relay-originals`에 올리고, 반대 owner 대상 `transfer_queue`를 7일 만료로 생성 | ~1일 |
-| 3-2. 상대방 폰/PC 수령 | 활성 owner의 대기 큐 표시 → 다운로드 시작 시 짧은 signed URL 생성. 웹/PWA는 파일 다운로드, Capacitor 카메라롤 저장은 Phase 4에서 확장 | ~0.5–1일 |
+| 3-2. 상대방 폰/PC 수령 | **부분 구현(adapter 자동 검증 완료, UI·실환경 검증 대기)** — 활성 owner의 만료 전 대기 큐 조회와 다운로드 시작 시 5분 signed URL 생성. Web/PWA 다운로드 UI와 Capacitor 카메라롤 저장은 후속 | ~0.5–1일 |
 | 3-3. 저장 확인·즉시 삭제 | 사용자가 저장 성공을 확인하면 `photo_copies`를 `present`로 기록 → transfer `landed` → 임시 원본 삭제 → `deleted` | ~0.5일 |
 | 3-4. 만료·실패 정리 | 7일 지난 미수령 원본과 실패한 삭제를 재처리. 기록·display/thumb는 보존하고 원본만 정리 | ~0.5일 |
 | 3-5. 보관 현황·안전 표시 | 위치별 사본 집계와 "폰에서 지워도 안전" 후보 표시. 웹은 표시까지만, 네이티브 삭제는 Phase 4 | ~1일 |
@@ -264,12 +264,12 @@ Phase 0  데모 (로컬 서버 시연)      완료/과거 단계
 Phase 1A Capacitor 업로드 Spike     진행 후반 — Android GPS 보존 확인, iOS 실기기 검증 남음
 Phase 1B MVP (Supabase 전환)        진행 중 — 영속화 슬라이스(fetch/CRUD/업로드 준비) 구현(PR #3), 실환경·실기기 검증 남음
 Phase 2  모바일 웹/PWA 보강          일부 선행 완료 — 모바일 디자인 셸/탭 UI 구현, PWA 보강 남음
-Phase 3  전송·공동관리              부분 구현 — 3-1 릴레이 생성 완료, 3-2 수령부터 미구현
+Phase 3  전송·공동관리              부분 구현 — 3-1 완료, 3-2 수령 adapter 구현·UI 미구현
 Phase 4  스토어 앱                  미착수 — 카메라롤 저장/삭제/푸시 등 네이티브 기능
 Phase 5  개방·확장                  미착수/선택
 ```
 
-### 현재 구현 위치 (2026-07-17 기준)
+### 현재 구현 위치 (2026-07-21 기준)
 
 현재 코드는 로드맵 순서와 완전히 일직선으로 진행되지는 않았다. 화면 쪽은 Phase 2 일부가 선행됐고, 데이터 영속화는 Phase 1B가 아직 핵심 병목이다.
 
@@ -279,9 +279,16 @@ Phase 5  개방·확장                  미착수/선택
 | Mobile 화면 | Phase 2의 핵심인 모바일 디자인 shell, 5-tab 앱, 주요 overlay가 실제 데이터에 연결됨 |
 | Capacitor 업로드 spike | Phase 1A 대부분 완료. Android original media picker에서 GPS 보존 확인. iOS dev install 검증은 남음 |
 | Supabase MVP 영속화 | Phase 1B 진행 중. PR #3로 fetchState 조립·레코드/정리함/배치/새 여행 영속화·클라이언트 업로드 준비(SHA-256·EXIF·display/thumb WebP→inbox_items) 구현. 실제 Supabase 환경·실기기 검증은 남음 |
-| 원본 전송/상대방 폰 저장 | Phase 3-1 자동 임시 릴레이 생성 구현 및 schema/adapter 자동 검증 완료. 실제 Supabase 적용·사진/브라우저/기기 검증은 대기 중이며, 3-2 상대방 다운로드/저장부터 후속 단계는 미구현 |
+| 원본 전송/상대방 폰 저장 | Phase 3-1 자동 임시 릴레이 생성과 Phase 3-2 수신 목록·5분 download URL adapter 계약 구현. Web/Mobile UI, 저장 확인, `photo_copies`, 임시 원본 삭제와 실제 Supabase·브라우저·기기 검증은 대기 중 |
 
-따라서 현재 위치는 **Phase 1A 후반 + Phase 2 일부 선행 완료 + Phase 1B 영속화 슬라이스 병합 + Phase 3-1 자동 릴레이 생성 구현**으로 본다. 다음 Cloud-friendly 조각은 Phase 3-2의 상대방 수령 경로이며, 실제 Supabase 환경·사진/브라우저/기기·iOS·외장하드 검증은 Local-only 후속으로 남긴다.
+따라서 현재 위치는 **Phase 1A 후반 + Phase 2 일부 선행 완료 + Phase 1B 영속화 슬라이스 병합 + Phase 3-1 자동 릴레이 생성 + Phase 3-2 수령 adapter 구현**으로 본다. 다음 Cloud-friendly 조각은 Phase 3-2의 Web/Mobile 다운로드 UI이며, 실제 Supabase 환경·사진/브라우저/기기·iOS·외장하드 검증은 Local-only 후속으로 남긴다.
+
+#### 진행 로그 — 2026-07-21 · Phase 3-2 상대방 원본 다운로드 adapter
+
+- **수신 목록 계약**: 활성 logical owner와 `status = uploaded`가 일치하고 아직 만료되지 않은 전송만 반환한다. UI 응답에는 private Storage `tmp_path`를 노출하지 않는다.
+- **다운로드 계약**: 사용자 다운로드 동작 시 전송 ID·수신자·상태·만료·경로를 다시 확인한 뒤 원본 파일명을 사용하는 5분 signed URL을 만든다. 실패·만료 전송은 signed URL을 만들지 않는다.
+- **자동 검증**: recipient adapter의 성공·거부 경로를 포함해 31개 test file의 119/119 테스트와 121-module Vite build가 통과했다.
+- **남은 범위**: Web/Mobile 다운로드 UI, 브라우저·OS 저장 성공 확인, `photo_copies`, `landed`/`deleted` 전이, 임시 원본 삭제와 만료 cleanup은 구현되지 않았다. 실제 원본 수령 성공을 아직 주장하지 않는다.
 
 #### 진행 로그 — 2026-07-17 · Phase 3-1 자동 임시 원본 릴레이 생성
 

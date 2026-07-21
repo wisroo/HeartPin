@@ -3,6 +3,7 @@ import { createBrowserUploadPreparer } from "./supabaseUploadPrep.js";
 
 const PHOTOS_BUCKET = "photos";
 const SIGNED_URL_SECONDS = 60 * 60;
+const RELAY_SIGNED_URL_SECONDS = 5 * 60;
 const RELAY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const EDITABLE_SPOT_FIELDS = new Set(["name", "time", "mood", "guide", "reaction"]);
 
@@ -357,6 +358,20 @@ async function inboxRowToItem(row, signedUrl) {
   };
 }
 
+function incomingTransferFromRow(row) {
+  return {
+    id: row.id,
+    contentHash: row.content_hash,
+    sourceOwner: row.source_owner,
+    destinationOwner: row.dest_owner,
+    originalName: row.original_name,
+    originalSize: row.original_size,
+    mimeType: row.mime_type,
+    expiresAt: row.expires_at,
+    createdAt: row.created_at,
+  };
+}
+
 async function assembleState(client, rows) {
   const state = emptyState();
   const signedUrl = await createPathSigner(client);
@@ -445,6 +460,61 @@ export function createSupabaseAdapter({ client = createSupabaseClient(), prepare
       const rows = { trips, days, spots, moments, inboxItems };
       if (since != null && computeVersion(rows) <= since) return { unchanged: true };
       return assembleState(client, rows);
+    },
+
+    async listIncomingTransfers(owner) {
+      relayDestinationFor(owner);
+      const sessionResult = await client.auth.getSession();
+      const session = assertSupabaseOk(sessionResult, "Supabase 세션 확인 실패")?.session;
+      if (!session?.user) throw new Error("Supabase 로그인이 필요해요");
+      const rows = assertSupabaseOk(
+        await client.from("transfer_queue")
+          .select("*")
+          .eq("dest_owner", owner)
+          .eq("status", "uploaded")
+          .order("created_at", { ascending: false }),
+        "Supabase 수신 대기 원본 조회 실패",
+      ) || [];
+      return rows
+        .filter((row) => new Date(row.expires_at).getTime() > Date.now())
+        .map(incomingTransferFromRow);
+    },
+
+    async createIncomingTransferDownload(transferId, owner) {
+      relayDestinationFor(owner);
+      const sessionResult = await client.auth.getSession();
+      const session = assertSupabaseOk(sessionResult, "Supabase 세션 확인 실패")?.session;
+      if (!session?.user) throw new Error("Supabase 로그인이 필요해요");
+      const row = assertSupabaseOk(
+        await client.from("transfer_queue")
+          .select("*")
+          .eq("id", transferId)
+          .eq("dest_owner", owner)
+          .eq("status", "uploaded")
+          .maybeSingle(),
+        "Supabase 원본 전송 조회 실패",
+      );
+      if (!row) throw new Error("받을 수 있는 원본 전송을 찾지 못했어요");
+      if (new Date(row.expires_at).getTime() <= Date.now()) {
+        throw new Error("원본 전송이 만료되었어요");
+      }
+      if (!row.tmp_path?.trim()) throw new Error("원본 전송 경로가 없어요");
+      const signed = assertSupabaseOk(
+        await client.storage.from(PHOTOS_BUCKET).createSignedUrl(
+          row.tmp_path,
+          RELAY_SIGNED_URL_SECONDS,
+          { download: row.original_name },
+        ),
+        "Supabase 원본 다운로드 URL 생성 실패",
+      );
+      return {
+        transferId: row.id,
+        url: signed.signedUrl,
+        filename: row.original_name,
+        mimeType: row.mime_type,
+        size: row.original_size,
+        expiresAt: row.expires_at,
+      };
     },
 
     async uploadPhotos(items, owner, onProgress) {
