@@ -186,7 +186,7 @@ git add README.md docs/ROADMAP.md docs/superpowers/specs/2026-07-17-automatic-or
 git commit -m "docs: record recipient download contract"
 ```
 
-- [ ] **Step 5: Prepare a draft PR without merging**
+- [x] **Step 5: Prepare a draft PR without merging**
 
 Push `feature/recipient-transfer-download` and create a draft PR targeting `main`. Include automated verification results and state that live Supabase, browser download, mobile OS save behavior, and physical-device checks remain Local-only.
 
