@@ -31,7 +31,7 @@
 - Consumes: authenticated Supabase session, `owner: "bara" | "nyong"`, `transferId: string`, private `photos` bucket.
 - Produces: `listIncomingTransfers(owner)` returning UI-safe transfer metadata and `createIncomingTransferDownload(transferId, owner)` returning `{ transferId, url, filename, mimeType, size, expiresAt }`.
 
-- [ ] **Step 1: Extend the Supabase client double and write failing list tests**
+- [x] **Step 1: Extend the Supabase client double and write failing list tests**
 
 Add query support for `maybeSingle()` and assert that `listIncomingTransfers("nyong")`:
 
@@ -53,20 +53,22 @@ expect(result[0]).not.toHaveProperty("tmp_path");
 
 Cover owner/status filtering, removal of expired rows, invalid owner rejection, and unauthenticated rejection. Freeze time with `vi.setSystemTime("2026-07-21T01:02:03.000Z")`.
 
-- [ ] **Step 2: Run the list tests to verify RED**
+- [x] **Step 2: Run the list tests to verify RED**
 
 Run: `npm test -- --run src/adapters/supabaseAdapter.test.js`
 
 Expected: FAIL because `listIncomingTransfers` does not exist.
 
-- [ ] **Step 3: Implement the minimal list method**
+- [x] **Step 3: Implement the minimal list method**
 
 Add a pure row mapper that omits `tmp_path`, validate the logical owner, require a Supabase session, query only `dest_owner = owner` and `status = uploaded`, order newest first, and filter rows whose parsed `expires_at` is not strictly later than `Date.now()`.
 
 ```js
 async listIncomingTransfers(owner) {
-  assertOwner(owner);
-  await requireSessionUser(client);
+  relayDestinationFor(owner);
+  const sessionResult = await client.auth.getSession();
+  const session = assertSupabaseOk(sessionResult, "Supabase 세션 확인 실패")?.session;
+  if (!session?.user) throw new Error("Supabase 로그인이 필요해요");
   const rows = assertSupabaseOk(
     await client.from("transfer_queue")
       .select("*")
@@ -81,13 +83,13 @@ async listIncomingTransfers(owner) {
 }
 ```
 
-- [ ] **Step 4: Run the focused adapter tests to verify GREEN**
+- [x] **Step 4: Run the focused adapter tests to verify GREEN**
 
 Run: `npm test -- --run src/adapters/supabaseAdapter.test.js`
 
 Expected: PASS.
 
-- [ ] **Step 5: Write failing download tests**
+- [x] **Step 5: Write failing download tests**
 
 Assert that `createIncomingTransferDownload("tr_hash-123", "nyong")` re-fetches an `uploaded` row for `nyong` and calls:
 
@@ -101,13 +103,13 @@ storage.createSignedUrl(
 
 Expect the returned object to contain the signed URL and safe metadata but no Storage path. Cover invalid owner, unauthenticated session, missing/non-recipient transfer, expired transfer, blank path, and signing failure. Assert no signing call occurs for every rejected row.
 
-- [ ] **Step 6: Run the download tests to verify RED**
+- [x] **Step 6: Run the download tests to verify RED**
 
 Run: `npm test -- --run src/adapters/supabaseAdapter.test.js`
 
 Expected: FAIL because `createIncomingTransferDownload` does not exist.
 
-- [ ] **Step 7: Implement the minimal download method**
+- [x] **Step 7: Implement the minimal download method**
 
 Add `RELAY_SIGNED_URL_SECONDS = 5 * 60`. Require a session, validate `owner`, fetch one `uploaded` transfer by `id` and `dest_owner`, reject missing/expired/pathless data before Storage access, and sign with the original filename.
 
@@ -124,13 +126,13 @@ const signed = assertSupabaseOk(
 
 Return `{ transferId, url, filename, mimeType, size, expiresAt }` and omit `tmp_path`.
 
-- [ ] **Step 8: Run the focused adapter tests to verify GREEN**
+- [x] **Step 8: Run the focused adapter tests to verify GREEN**
 
 Run: `npm test -- --run src/adapters/supabaseAdapter.test.js`
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit the adapter slice**
+- [x] **Step 9: Commit the adapter slice**
 
 ```bash
 git add src/adapters/supabaseAdapter.js src/adapters/supabaseAdapter.test.js
@@ -151,11 +153,11 @@ git commit -m "feat: prepare recipient original downloads"
 - Consumes: verified Task 1 behavior.
 - Produces: an accurate Phase 3 status and explicit Local-only/user-verification gates.
 
-- [ ] **Step 1: Document only the completed recipient-download contract**
+- [x] **Step 1: Document only the completed recipient-download contract**
 
 Record that the adapter can list unexpired transfers for the active logical recipient and issue a five-minute download URL on demand. Keep the following explicitly unimplemented: Web/Mobile UI, operating-system save confirmation, `photo_copies`, `landed`/`deleted` transitions, relay deletion, and scheduled expiry cleanup.
 
-- [ ] **Step 2: Run full verification**
+- [x] **Step 2: Run full verification**
 
 ```bash
 npm test -- --run
@@ -165,7 +167,7 @@ git diff --check
 
 Expected: all commands exit 0.
 
-- [ ] **Step 3: Self-review the complete branch diff**
+- [x] **Step 3: Self-review the complete branch diff**
 
 Run:
 
@@ -177,7 +179,7 @@ rg -n "TODO|FIXME|TBD|placeholder|not implemented" src/adapters/supabaseAdapter.
 
 Confirm that no service-role key, secret, permanent-original path, UI change, or `photo_copies` mutation was added.
 
-- [ ] **Step 4: Commit documentation and plan completion**
+- [x] **Step 4: Commit documentation and plan completion**
 
 ```bash
 git add README.md docs/ROADMAP.md docs/superpowers/specs/2026-07-17-automatic-original-relay-design.md docs/superpowers/plans/2026-07-21-recipient-transfer-download.md

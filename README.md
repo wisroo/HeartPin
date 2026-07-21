@@ -27,7 +27,7 @@ Phase 1 전환용 스키마와 환경변수 계약은 레포에 포함되어 있
 
 Supabase 업로드는 원본을 영구 보관하지 않습니다. 브라우저에서 SHA-256을 계산하고 display/thumb WebP 압축본을 private `photos` bucket에 영구 저장한 뒤, `inbox_items`에 메타데이터를 기록합니다. 준비된 업로드에서는 상대방이 원본을 받을 수 있도록 원본을 private relay 경로에 임시 저장하고 `transfer_queue`에 반대 owner와 서버에서 계산한 7일 만료 시각을 함께 기록합니다.
 
-상대방 다운로드/저장 확인, `photo_copies` 기록, 만료 원본 삭제 작업은 후속 구현 범위입니다. 따라서 현재 자동화 검증은 relay 생성 계약까지만 다루며, 실제 Supabase와 기기에서의 수령·삭제 동작을 검증한 것으로 간주하지 않습니다. Capacitor 실기기 업로드 spike에서 쓰던 임시 원본 검증 prefix는 디버그/레거시 경로로만 남겨 둡니다.
+상대방 수령 adapter는 활성 owner의 만료 전 `uploaded` 전송만 목록으로 내보내고, 사용자가 다운로드를 시작할 때 원본 파일명으로 5분짜리 signed URL을 생성합니다. Web/Mobile 다운로드 UI, 저장 성공 확인, `photo_copies` 기록, 임시 원본 삭제와 만료 cleanup은 후속 구현 범위입니다. 따라서 현재 자동화 검증은 relay 생성과 recipient adapter 계약만 다루며, 실제 Supabase·브라우저·기기에서 원본 수령이나 삭제를 검증한 것으로 간주하지 않습니다. Capacitor 실기기 업로드 spike에서 쓰던 임시 원본 검증 prefix는 디버그/레거시 경로로만 남겨 둡니다.
 
 ```text
 photos/display/<content_hash>.webp                                             # permanent
