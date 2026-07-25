@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildTestOriginalPath, createSupabaseAdapter } from "./supabaseAdapter.js";
 
 function makeUploadClient({
@@ -84,10 +84,10 @@ function preparedUpload(overrides = {}) {
   };
 }
 
-function makeFetchClient({ user = { id: "user-123" }, rows = {} } = {}) {
+function makeFetchClient({ user = { id: "user-123" }, rows = {}, signedUrlErrors = {} } = {}) {
   const createSignedUrl = vi.fn((path) => Promise.resolve({
     data: { signedUrl: `https://signed.example/${path}` },
-    error: null,
+    error: signedUrlErrors[path] || null,
   }));
   const queries = [];
   const updates = [];
@@ -115,6 +115,12 @@ function makeFetchClient({ user = { id: "user-123" }, rows = {} } = {}) {
           return query;
         }),
         single: vi.fn(() => {
+          const row = (rows[table] || []).find((candidate) => (
+            filters.every((filter) => candidate[filter.column] === filter.value)
+          ));
+          return Promise.resolve({ data: row || null, error: null });
+        }),
+        maybeSingle: vi.fn(() => {
           const row = (rows[table] || []).find((candidate) => (
             filters.every((filter) => candidate[filter.column] === filter.value)
           ));
@@ -156,6 +162,25 @@ function makeFetchClient({ user = { id: "user-123" }, rows = {} } = {}) {
       return query;
     }),
     spies: { createSignedUrl, queries, updates, deletes, inserts },
+  };
+}
+
+function transferRow(overrides = {}) {
+  return {
+    id: "tr_hash-123",
+    user_id: "user-123",
+    content_hash: "hash-123",
+    source_owner: "bara",
+    dest_owner: "nyong",
+    tmp_path: "relay-originals/user-123/tr_hash-123/gps.jpg",
+    original_name: "gps.jpg",
+    original_size: 3,
+    mime_type: "image/jpeg",
+    status: "uploaded",
+    expires_at: "2026-07-28T01:02:03.000Z",
+    created_at: "2026-07-21T01:02:03.000Z",
+    updated_at: "2026-07-21T01:02:03.000Z",
+    ...overrides,
   };
 }
 
@@ -375,6 +400,157 @@ describe("supabaseAdapter.fetchState", () => {
 
     expect(result).toEqual({ unchanged: true });
     expect(client.spies.createSignedUrl).not.toHaveBeenCalled();
+  });
+});
+
+describe("supabaseAdapter incoming transfers", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime("2026-07-21T01:02:03.000Z");
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("lists only unexpired uploaded transfers for the active recipient", async () => {
+    const client = makeFetchClient({
+      rows: {
+        transfer_queue: [
+          transferRow(),
+          transferRow({ id: "tr_expired", expires_at: "2026-07-21T01:02:03.000Z" }),
+          transferRow({ id: "tr_landed", status: "landed" }),
+          transferRow({ id: "tr_for_bara", dest_owner: "bara" }),
+        ],
+      },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    const result = await adapter.listIncomingTransfers("nyong");
+
+    expect(result).toEqual([{
+      id: "tr_hash-123",
+      contentHash: "hash-123",
+      sourceOwner: "bara",
+      destinationOwner: "nyong",
+      originalName: "gps.jpg",
+      originalSize: 3,
+      mimeType: "image/jpeg",
+      expiresAt: "2026-07-28T01:02:03.000Z",
+      createdAt: "2026-07-21T01:02:03.000Z",
+    }]);
+    expect(result[0]).not.toHaveProperty("tmpPath");
+    expect(result[0]).not.toHaveProperty("tmp_path");
+    const transferQuery = client.spies.queries.find(({ table }) => table === "transfer_queue")?.query;
+    expect(transferQuery.eq).toHaveBeenCalledWith("dest_owner", "nyong");
+    expect(transferQuery.eq).toHaveBeenCalledWith("status", "uploaded");
+    expect(client.spies.createSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unsupported logical recipient", async () => {
+    const adapter = createSupabaseAdapter({ client: makeFetchClient() });
+
+    await expect(adapter.listIncomingTransfers("shared"))
+      .rejects.toThrow("사진 owner는 bara 또는 nyong이어야 해요");
+  });
+
+  it("requires a Supabase session before listing incoming transfers", async () => {
+    const adapter = createSupabaseAdapter({ client: makeFetchClient({ user: null }) });
+
+    await expect(adapter.listIncomingTransfers("nyong"))
+      .rejects.toThrow("Supabase 로그인이 필요해요");
+  });
+
+  it("creates a five-minute download URL for the active recipient", async () => {
+    const client = makeFetchClient({ rows: { transfer_queue: [transferRow()] } });
+    const adapter = createSupabaseAdapter({ client });
+
+    const result = await adapter.createIncomingTransferDownload("tr_hash-123", "nyong");
+
+    expect(client.spies.createSignedUrl).toHaveBeenCalledWith(
+      "relay-originals/user-123/tr_hash-123/gps.jpg",
+      300,
+      { download: "gps.jpg" },
+    );
+    expect(result).toEqual({
+      transferId: "tr_hash-123",
+      url: "https://signed.example/relay-originals/user-123/tr_hash-123/gps.jpg",
+      filename: "gps.jpg",
+      mimeType: "image/jpeg",
+      size: 3,
+      expiresAt: "2026-07-28T01:02:03.000Z",
+    });
+    expect(result).not.toHaveProperty("tmpPath");
+    expect(result).not.toHaveProperty("tmp_path");
+    const transferQuery = client.spies.queries.find(({ table }) => table === "transfer_queue")?.query;
+    expect(transferQuery.eq).toHaveBeenCalledWith("id", "tr_hash-123");
+    expect(transferQuery.eq).toHaveBeenCalledWith("dest_owner", "nyong");
+    expect(transferQuery.eq).toHaveBeenCalledWith("status", "uploaded");
+  });
+
+  it("rejects an unsupported recipient before signing a download", async () => {
+    const client = makeFetchClient({ rows: { transfer_queue: [transferRow()] } });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(adapter.createIncomingTransferDownload("tr_hash-123", "shared"))
+      .rejects.toThrow("사진 owner는 bara 또는 nyong이어야 해요");
+    expect(client.spies.createSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it("requires a Supabase session before signing a download", async () => {
+    const client = makeFetchClient({ user: null, rows: { transfer_queue: [transferRow()] } });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(adapter.createIncomingTransferDownload("tr_hash-123", "nyong"))
+      .rejects.toThrow("Supabase 로그인이 필요해요");
+    expect(client.spies.createSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["missing", []],
+    ["another recipient", [transferRow({ dest_owner: "bara" })]],
+    ["non-uploaded", [transferRow({ status: "landed" })]],
+  ])("rejects a %s transfer before signing", async (_label, transferRows) => {
+    const client = makeFetchClient({ rows: { transfer_queue: transferRows } });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(adapter.createIncomingTransferDownload("tr_hash-123", "nyong"))
+      .rejects.toThrow("받을 수 있는 원본 전송을 찾지 못했어요");
+    expect(client.spies.createSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it("rejects an expired transfer before signing", async () => {
+    const client = makeFetchClient({
+      rows: { transfer_queue: [transferRow({ expires_at: "2026-07-21T01:02:03.000Z" })] },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(adapter.createIncomingTransferDownload("tr_hash-123", "nyong"))
+      .rejects.toThrow("원본 전송이 만료되었어요");
+    expect(client.spies.createSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it("rejects a pathless transfer before signing", async () => {
+    const client = makeFetchClient({
+      rows: { transfer_queue: [transferRow({ tmp_path: " " })] },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(adapter.createIncomingTransferDownload("tr_hash-123", "nyong"))
+      .rejects.toThrow("원본 전송 경로가 없어요");
+    expect(client.spies.createSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a signed download URL failure", async () => {
+    const relayPath = "relay-originals/user-123/tr_hash-123/gps.jpg";
+    const client = makeFetchClient({
+      rows: { transfer_queue: [transferRow()] },
+      signedUrlErrors: { [relayPath]: { message: "signing unavailable" } },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(adapter.createIncomingTransferDownload("tr_hash-123", "nyong"))
+      .rejects.toThrow("Supabase 원본 다운로드 URL 생성 실패: signing unavailable");
   });
 });
 

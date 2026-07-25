@@ -1,11 +1,11 @@
 # Phase 3 Automatic Original Relay Design
 
 Date: 2026-07-17
-Status: Implemented, awaiting user verification
+Status: Relay creation and recipient-download adapter implemented, awaiting user verification
 
 ## Goal
 
-When either `bara` or `nyong` records a photo, HeartPin permanently stores only the existing display and thumb derivatives, while also placing the original in private Supabase Storage for the other person to receive. The implemented upload slice creates that temporary relay with a server-enforced seven-day expiry. Successful recipient save, relay deletion, and scheduled expiry cleanup remain follow-up slices.
+When either `bara` or `nyong` records a photo, HeartPin permanently stores only the existing display and thumb derivatives, while also placing the original in private Supabase Storage for the other person to receive. The upload slice creates that temporary relay with a server-enforced seven-day expiry, and the recipient adapter lists eligible transfers and creates five-minute download URLs on demand. Web/Mobile download UI, successful recipient save, relay deletion, and scheduled expiry cleanup remain follow-up slices.
 
 This moves the original-relay path ahead of the remaining Phase 1B external-drive and real-device validation work. Those deferred items remain valid but do not block this Phase 3 slice.
 
@@ -103,7 +103,7 @@ Progress remains item-based so existing screens continue to work. A photo reache
 
 ## Recipient and Cleanup Flow
 
-These are follow-up slices, not part of the first implementation:
+Steps 1-2 now have an adapter implementation; UI integration and steps 3-5 remain follow-up slices:
 
 1. List `uploaded` transfers whose `dest_owner` matches the active device identity.
 2. Create a short-lived signed URL only when the recipient initiates download.
@@ -126,6 +126,17 @@ The implemented code change is intentionally limited to automatic relay creation
 
 Out of scope for that slice: transfer UI, signed recipient download, `photo_copies` confirmation, scheduled expiry cleanup, duplicate-upload UX, permanent derivative cleanup, external-drive work, and real-device validation. The implementation is therefore awaiting user verification in a configured Supabase project and on target devices; the automated checks below do not replace that work.
 
+## Implemented Recipient-Download Adapter Slice
+
+The recipient adapter adds two narrow operations without changing either UI shell:
+
+- `listIncomingTransfers(owner)` returns only unexpired `uploaded` transfers for the active logical recipient and omits the private `tmp_path`;
+- `createIncomingTransferDownload(transferId, owner)` re-fetches and validates recipient, status, expiry, and path before creating a five-minute signed URL that downloads with `original_name`;
+- invalid owners, unauthenticated sessions, missing/non-recipient/non-uploaded transfers, expired transfers, missing paths, and Storage signing errors are covered by adapter tests;
+- rejected transfers never reach the Storage signing call, so a signed relay URL is created only after an explicit valid download request.
+
+Out of scope for this slice: Web/Mobile download UI, browser or OS save confirmation, `photo_copies`, `landed`/`deleted` transitions, temporary-object deletion, scheduled expiry cleanup, and real-device validation. A generated URL proves only the adapter contract, not that a browser or phone saved the original successfully.
+
 ## Verification
 
 Cloud-friendly verification:
@@ -136,7 +147,7 @@ npm run build
 git diff --check
 ```
 
-The adapter tests will use mocked Supabase table and Storage clients. They must prove that the original goes only to `relay-originals`, the transfer goes to the opposite identity, expiry is seven days, and queue failure removes the inbox row and temporary object.
+The adapter tests use mocked Supabase table and Storage clients. They prove that the original goes only to `relay-originals`, the transfer goes to the opposite identity, expiry is seven days, queue failure removes the inbox row and temporary object, recipient lists omit private paths, and rejected or expired downloads do not create signed URLs.
 
 Local-only verification after later recipient slices:
 
