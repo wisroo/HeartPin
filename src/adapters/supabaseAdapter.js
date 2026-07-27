@@ -823,6 +823,8 @@ function getDefaultAdapter() {
 export const supabaseAdapter = {
   signIn: (...args) => getDefaultAdapter().signIn(...args),
   fetchState: (...args) => getDefaultAdapter().fetchState(...args),
+  listIncomingTransfers: (...args) => getDefaultAdapter().listIncomingTransfers(...args),
+  createIncomingTransferDownload: (...args) => getDefaultAdapter().createIncomingTransferDownload(...args),
   uploadPhotos: (...args) => getDefaultAdapter().uploadPhotos(...args),
   placePhotos: (...args) => getDefaultAdapter().placePhotos(...args),
   addTrip: (...args) => getDefaultAdapter().addTrip(...args),

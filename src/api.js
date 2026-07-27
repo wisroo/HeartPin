@@ -29,6 +29,20 @@ export function uploadPhotos(files, owner, onProgress) {
   return adapter.uploadPhotos(files, owner, onProgress);
 }
 
+export function listIncomingTransfers(owner) {
+  if (API_MODE !== "supabase" || !adapter.listIncomingTransfers) {
+    throw new Error("Supabase 모드에서만 원본 전송을 받을 수 있어요.");
+  }
+  return adapter.listIncomingTransfers(owner);
+}
+
+export function createIncomingTransferDownload(transferId, owner) {
+  if (API_MODE !== "supabase" || !adapter.createIncomingTransferDownload) {
+    throw new Error("Supabase 모드에서만 원본 전송을 받을 수 있어요.");
+  }
+  return adapter.createIncomingTransferDownload(transferId, owner);
+}
+
 export const opPlacePhotos = (rows) => adapter.placePhotos(rows);
 export const opAddTrip = (trip) => adapter.addTrip(trip);
 export const opEditTrip = (tripId, text) => adapter.editTrip(tripId, text);
