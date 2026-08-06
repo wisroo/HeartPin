@@ -19,6 +19,13 @@ function tableSql(name) {
 }
 
 describe("Phase 3 original relay schema", () => {
+  it("exposes an exact recipient-copy identity for idempotent upserts", () => {
+    expect(compactSql(schema)).toContain(compactSql(`
+      create unique index if not exists photo_copies_unique_owner_location
+      on public.photo_copies (content_hash, location, owner);
+    `));
+  });
+
   it("defines explicit transfer owners and original metadata", () => {
     const transferTable = tableSql("transfer_queue");
 

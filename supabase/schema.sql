@@ -105,6 +105,9 @@ create table if not exists public.photo_copies (
 create unique index if not exists photo_copies_unique_location
 on public.photo_copies (content_hash, location, coalesce(owner, 'shared'));
 
+create unique index if not exists photo_copies_unique_owner_location
+on public.photo_copies (content_hash, location, owner);
+
 create table if not exists public.transfer_queue (
   id text primary key default gen_random_uuid()::text,
   user_id uuid not null references auth.users(id) on delete cascade,
