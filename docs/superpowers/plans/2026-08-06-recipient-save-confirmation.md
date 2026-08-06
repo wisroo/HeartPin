@@ -461,9 +461,9 @@ git add src/api.js src/api.test.js README.md docs/ROADMAP.md docs/superpowers/sp
 git commit -m "docs: record recipient save confirmation"
 ```
 
-- [ ] **Step 9: Prepare a draft PR without merging**
+- [x] **Step 9: Prepare a draft PR without merging**
 
-Push `feature/recipient-save-confirmation` and open a draft PR targeting `main`. Include automated verification results and Local-only limitations. Add `codex` and `codex-automation` labels only if they exist. Never merge automatically.
+Pushed `feature/recipient-save-confirmation` and opened draft PR #8 targeting `main`. The PR includes automated verification results and Local-only limitations. The repository does not provide `codex` or `codex-automation` labels. No merge was performed.
 
 ## Self-Review
 
