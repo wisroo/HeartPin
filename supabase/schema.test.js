@@ -41,9 +41,56 @@ describe("Phase 3 original relay schema", () => {
     const compact = compactSql(schema);
 
     expect(compact).toContain("alter table public.transfer_queue add column if not exists landed_location text;");
+    expect(compact).toContain(
+      "legacy landed or deleted transfer_queue rows require landed_location before rerunning",
+    );
     expect(compact).toContain(compactSql(`
       constraint transfer_queue_landed_location_check
       check (landed_location is null or landed_location in ('bara_phone', 'nyong_phone', 'personal_pc'))
+    `));
+    expect(compact).toContain(compactSql(`
+      constraint transfer_queue_landed_state_check
+      check (
+        (status in ('landed', 'deleted') and landed_location is not null)
+        or (status not in ('landed', 'deleted'))
+      )
+    `));
+    expect(compact).toContain(compactSql(`
+      constraint transfer_queue_landed_owner_check
+      check (
+        landed_location is null
+        or landed_location = 'personal_pc'
+        or (dest_owner = 'bara' and landed_location = 'bara_phone')
+        or (dest_owner = 'nyong' and landed_location = 'nyong_phone')
+      )
+    `));
+  });
+
+  it("atomically claims a recipient save before client-side cleanup", () => {
+    const compact = compactSql(schema);
+
+    expect(compact).toContain(compactSql(`
+      create or replace function public.confirm_incoming_transfer_landed(
+        p_transfer_id text,
+        p_owner text,
+        p_location text
+      ) returns jsonb
+      language plpgsql
+      security invoker
+      set search_path = ''
+    `));
+    expect(compact).toContain("user_id = (select auth.uid())");
+    expect(compact).toContain("for update;");
+    expect(compact).toContain("insert into public.photo_copies");
+    expect(compact).toContain("on conflict (content_hash, location, owner) do update");
+    expect(compact).toContain(compactSql(`
+      update public.transfer_queue
+      set status = 'landed', landed_location = p_location
+      where id = transfer_row.id;
+    `));
+    expect(compact).toContain(compactSql(`
+      revoke all on function public.confirm_incoming_transfer_landed(text, text, text) from public;
+      grant execute on function public.confirm_incoming_transfer_landed(text, text, text) to authenticated;
     `));
   });
 

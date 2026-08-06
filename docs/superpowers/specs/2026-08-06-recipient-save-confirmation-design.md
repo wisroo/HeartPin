@@ -1,7 +1,7 @@
 # Phase 3 Recipient Save Confirmation Design
 
 Date: 2026-08-06
-Status: Approved for implementation
+Status: Implemented, awaiting user and Local-only verification
 
 ## Goal
 
@@ -53,26 +53,32 @@ path         = null
 checked_at   = current ISO timestamp
 ```
 
+`transfer_queue.landed_location` stores the same explicit location when the transfer first becomes `landed`. This nullable, constrained column lets cleanup and idempotent retries verify that they refer to the original confirmation rather than accepting a different location after the copy was recorded.
+
 ## State and Cleanup Flow
 
 1. Validate `owner`, `location`, and the owner/location combination before any mutation.
 2. Require an authenticated Supabase session.
-3. Re-fetch the transfer by id and destination owner. Accept only `uploaded`, `landed`, or `deleted`.
-4. If the transfer is already `deleted`, return the successful result without another mutation or Storage call.
-5. If the transfer is `uploaded`, reject it when expired or when `tmp_path` is blank, upsert the recipient copy, then change the transfer to `landed`.
-6. If the transfer is already `landed`, treat it as a retry after a prior confirmation and continue cleanup without writing a second copy.
-7. Delete `tmp_path` from the private `photos` bucket.
-8. Only after Storage deletion succeeds, change `landed` to `deleted` and return success.
+3. Call a security-invoker PostgreSQL function that selects the authenticated recipient transfer `for update`. Accept only `uploaded`, `landed`, or `deleted`.
+4. If the transfer is already `landed` or `deleted`, require its stored `landed_location` to match the requested location.
+5. If the transfer is already `deleted`, return the successful result without another mutation or Storage call.
+6. If the transfer is `uploaded`, reject it when expired or when its exact relay path is invalid, then atomically upsert the recipient copy and change the transfer to `landed` with `landed_location`.
+7. If the transfer is already `landed`, treat it as a retry after a prior confirmation and continue cleanup without writing a second copy.
+8. Require `tmp_path` to be exactly `relay-originals/<auth user>/<transfer id>/<filename>`, then delete it from the private `photos` bucket.
+9. Only after Storage deletion succeeds, conditionally change the matching `landed` row and location to `deleted`; require a returned row before reporting success.
 
 This ordering intentionally separates the durable save acknowledgement from cloud cleanup. The browser or device remains responsible for telling HeartPin that the save succeeded; the adapter cannot independently prove operating-system persistence.
+
+The schema refuses to continue when pre-existing `landed` or `deleted` rows have no `landed_location`. Because their physical destination cannot be inferred safely, live migration requires an operator to verify and backfill those rows first.
 
 ## Error and Retry Behavior
 
 - Unsupported owners, locations, and mismatched phone locations fail before authentication or mutation.
 - Missing, wrong-recipient, or unsupported-state transfers fail without writing `photo_copies` or deleting Storage.
+- Blank, malformed, other-user, or other-transfer relay paths fail before copy persistence or deletion.
+- `landed` or `deleted` retries with a different explicit location fail without cleanup or mutation.
 - An expired `uploaded` transfer fails before copy persistence. A `landed` retry remains eligible for cleanup because its copy was already acknowledged before expiry.
-- Copy-upsert failure leaves the transfer `uploaded` and the relay object intact.
-- Failure to mark `landed` may leave an idempotently upserted copy, but the relay object remains intact and the call can be retried.
+- Copy-upsert or `landed` failure rolls back the same DB transaction and leaves the relay object intact.
 - Storage deletion failure leaves the transfer `landed`; it must never be reported as `deleted`.
 - Failure to mark `deleted` after object removal also leaves the row `landed`. A later retry or Phase 3-4 cleanup may repeat the idempotent remove and complete the transition.
 
@@ -80,16 +86,17 @@ This ordering intentionally separates the durable save acknowledgement from clou
 
 Mocked adapter tests cover:
 
-- successful `nyong_phone` and `personal_pc` confirmations;
-- exact `photo_copies` upsert payload and conflict target;
-- mutation order: copy upsert, `landed`, Storage remove, `deleted`;
+- successful `bara_phone`, `nyong_phone`, and `personal_pc` confirmations;
+- RPC claim before Storage removal and a conditional `landed`/location transition before reporting `deleted`;
 - rejected owner/location combinations, missing sessions, wrong recipients, expired uploads, blank paths, and unsupported statuses;
-- copy-upsert, `landed` update, Storage removal, and final `deleted` update failures;
+- atomic copy/`landed` RPC, Storage removal, and final conditional `deleted` update failures;
 - `landed` cleanup retry and `deleted` idempotent retry;
+- mismatched retry-location rejection using persisted `landed_location`;
+- rejection of relay paths that do not belong to the authenticated user and selected transfer;
 - no permanent display/thumb removal;
 - lazy default adapter and shared `src/api.js` forwarding, including the local-mode rejection.
 
-Schema source-contract tests assert that the exact recipient-copy unique index is rerunnable. Full verification remains:
+Schema source-contract tests assert the rerunnable exact recipient-copy index, transactional RPC, authenticated row lock, migration preflight, and state/owner/location invariants. Full verification remains:
 
 ```bash
 npm test -- --run

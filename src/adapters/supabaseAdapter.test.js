@@ -88,9 +88,11 @@ function makeFetchClient({
   user = { id: "user-123" },
   rows = {},
   signedUrlErrors = {},
-  upsertErrors = {},
   updateErrors = {},
+  updateRows = {},
   removeError = null,
+  rpcData = null,
+  rpcError = null,
 } = {}) {
   const operations = [];
   const createSignedUrl = vi.fn((path) => Promise.resolve({
@@ -104,8 +106,13 @@ function makeFetchClient({
   const queries = [];
   const upserts = [];
   const updates = [];
+  const updateFilters = [];
   const deletes = [];
   const inserts = [];
+  const rpc = vi.fn((name, args) => {
+    operations.push({ type: "rpc", name, args });
+    return Promise.resolve({ data: rpcData, error: rpcError });
+  });
 
   return {
     auth: {
@@ -114,6 +121,7 @@ function makeFetchClient({
     storage: {
       from: vi.fn().mockReturnValue({ createSignedUrl, remove }),
     },
+    rpc,
     from: vi.fn((table) => {
       const filters = [];
       const inFilters = [];
@@ -147,22 +155,46 @@ function makeFetchClient({
         upsert: vi.fn((payload, options) => {
           upserts.push({ table, payload, options });
           operations.push({ type: "upsert", table, payload, options });
-          return Promise.resolve({ data: null, error: upsertErrors[table] || null });
+          return Promise.resolve({ data: null, error: null });
         }),
-        update: vi.fn((payload) => ({
-          eq: vi.fn((column, value) => {
-            updates.push({ table, payload, column, value });
-            operations.push({ type: "update", table, payload });
-            return Promise.resolve({
-              data: null,
-              error: updateErrors[payload.status] || updateErrors[table] || null,
-            });
-          }),
-          in: vi.fn((column, value) => {
-            updates.push({ table, payload, column, value });
-            return Promise.resolve({ data: null, error: null });
-          }),
-        })),
+        update: vi.fn((payload) => {
+          const mutationFilters = [];
+          let recorded = false;
+          const record = () => {
+            if (recorded) return;
+            recorded = true;
+            const [firstFilter = {}] = mutationFilters;
+            updates.push({ table, payload, column: firstFilter.column, value: firstFilter.value });
+            updateFilters.push({ table, payload, filters: [...mutationFilters] });
+            operations.push({ type: "update", table, payload, filters: [...mutationFilters] });
+          };
+          const result = () => ({
+            data: Object.prototype.hasOwnProperty.call(updateRows, payload.status)
+              ? updateRows[payload.status]
+              : null,
+            error: updateErrors[payload.status] || updateErrors[table] || null,
+          });
+          const mutation = {
+            eq: vi.fn((column, value) => {
+              mutationFilters.push({ column, value });
+              return mutation;
+            }),
+            in: vi.fn((column, value) => {
+              mutationFilters.push({ column, value });
+              return mutation;
+            }),
+            select: vi.fn(() => mutation),
+            maybeSingle: vi.fn(() => {
+              record();
+              return Promise.resolve(result());
+            }),
+            then(resolve, reject) {
+              record();
+              return Promise.resolve(result()).then(resolve, reject);
+            },
+          };
+          return mutation;
+        }),
         delete: vi.fn(() => ({
           in: vi.fn((column, value) => {
             deletes.push({ table, column, value });
@@ -189,9 +221,11 @@ function makeFetchClient({
       queries,
       upserts,
       updates,
+      updateFilters,
       deletes,
       inserts,
       operations,
+      rpc,
     },
   };
 }
@@ -597,7 +631,10 @@ describe("supabaseAdapter recipient save confirmation", () => {
   });
 
   it("records the recipient copy before deleting only the relay original", async () => {
-    const client = makeFetchClient({ rows: { transfer_queue: [transferRow()] } });
+    const client = makeFetchClient({
+      rpcData: transferRow({ status: "landed", landed_location: "nyong_phone" }),
+      updateRows: { deleted: { id: "tr_hash-123" } },
+    });
     const adapter = createSupabaseAdapter({ client });
 
     await expect(
@@ -608,35 +645,38 @@ describe("supabaseAdapter recipient save confirmation", () => {
       location: "nyong_phone",
     });
 
-    expect(client.spies.upserts).toEqual([{
-      table: "photo_copies",
-      payload: {
-        content_hash: "hash-123",
-        owner: "nyong",
-        location: "nyong_phone",
-        status: "present",
-        path: null,
-        checked_at: "2026-07-21T01:02:03.000Z",
-      },
-      options: { onConflict: "content_hash,location,owner" },
-    }]);
     expect(client.spies.operations).toEqual([
-      expect.objectContaining({ type: "upsert", table: "photo_copies" }),
       {
-        type: "update",
-        table: "transfer_queue",
-        payload: { status: "landed", landed_location: "nyong_phone" },
+        type: "rpc",
+        name: "confirm_incoming_transfer_landed",
+        args: {
+          p_transfer_id: "tr_hash-123",
+          p_owner: "nyong",
+          p_location: "nyong_phone",
+        },
       },
       {
         type: "remove",
         paths: ["relay-originals/user-123/tr_hash-123/gps.jpg"],
       },
-      { type: "update", table: "transfer_queue", payload: { status: "deleted" } },
+      {
+        type: "update",
+        table: "transfer_queue",
+        payload: { status: "deleted" },
+        filters: [
+          { column: "id", value: "tr_hash-123" },
+          { column: "status", value: "landed" },
+          { column: "landed_location", value: "nyong_phone" },
+        ],
+      },
     ]);
   });
 
   it("records personal PC as an explicit recipient location", async () => {
-    const client = makeFetchClient({ rows: { transfer_queue: [transferRow()] } });
+    const client = makeFetchClient({
+      rpcData: transferRow({ status: "landed", landed_location: "personal_pc" }),
+      updateRows: { deleted: { id: "tr_hash-123" } },
+    });
     const adapter = createSupabaseAdapter({ client });
 
     await expect(
@@ -646,17 +686,17 @@ describe("supabaseAdapter recipient save confirmation", () => {
       status: "deleted",
       location: "personal_pc",
     });
-    expect(client.spies.upserts[0].payload.location).toBe("personal_pc");
+    expect(client.spies.rpc).toHaveBeenCalledWith("confirm_incoming_transfer_landed", {
+      p_transfer_id: "tr_hash-123",
+      p_owner: "nyong",
+      p_location: "personal_pc",
+    });
   });
 
   it("retries cleanup from landed without writing a second copy", async () => {
     const client = makeFetchClient({
-      rows: {
-        transfer_queue: [transferRow({
-          status: "landed",
-          landed_location: "nyong_phone",
-        })],
-      },
+      rpcData: transferRow({ status: "landed", landed_location: "nyong_phone" }),
+      updateRows: { deleted: { id: "tr_hash-123" } },
     });
     const adapter = createSupabaseAdapter({ client });
 
@@ -667,24 +707,14 @@ describe("supabaseAdapter recipient save confirmation", () => {
       status: "deleted",
       location: "nyong_phone",
     });
+    expect(client.spies.rpc).toHaveBeenCalledOnce();
+    expect(client.spies.remove).toHaveBeenCalledOnce();
     expect(client.spies.upserts).toEqual([]);
-    expect(client.spies.operations).toEqual([
-      {
-        type: "remove",
-        paths: ["relay-originals/user-123/tr_hash-123/gps.jpg"],
-      },
-      { type: "update", table: "transfer_queue", payload: { status: "deleted" } },
-    ]);
   });
 
   it("returns an already deleted confirmation without another mutation", async () => {
     const client = makeFetchClient({
-      rows: {
-        transfer_queue: [transferRow({
-          status: "deleted",
-          landed_location: "nyong_phone",
-        })],
-      },
+      rpcData: transferRow({ status: "deleted", landed_location: "nyong_phone" }),
     });
     const adapter = createSupabaseAdapter({ client });
 
@@ -695,24 +725,21 @@ describe("supabaseAdapter recipient save confirmation", () => {
       status: "deleted",
       location: "nyong_phone",
     });
-    expect(client.spies.operations).toEqual([]);
+    expect(client.spies.operations).toEqual([expect.objectContaining({ type: "rpc" })]);
   });
 
   it("rejects a cleanup retry with a different landing location", async () => {
     const client = makeFetchClient({
-      rows: {
-        transfer_queue: [transferRow({
-          status: "landed",
-          landed_location: "nyong_phone",
-        })],
-      },
+      rpcError: { message: "incoming transfer was confirmed at a different location" },
     });
     const adapter = createSupabaseAdapter({ client });
 
     await expect(
       adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "personal_pc"),
-    ).rejects.toThrow("저장 확인 위치가 기존 기록과 맞지 않아요");
-    expect(client.spies.operations).toEqual([]);
+    ).rejects.toThrow(
+      "Supabase 원본 저장 확인 실패: incoming transfer was confirmed at a different location",
+    );
+    expect(client.spies.remove).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -744,90 +771,88 @@ describe("supabaseAdapter recipient save confirmation", () => {
   });
 
   it.each([
-    ["missing", []],
-    ["another recipient", [transferRow({ dest_owner: "bara" })]],
-    ["failed", [transferRow({ status: "failed" })]],
-  ])("rejects a %s transfer without mutation", async (_label, transferRows) => {
-    const client = makeFetchClient({ rows: { transfer_queue: transferRows } });
+    ["missing", "incoming transfer not found"],
+    ["another recipient", "incoming transfer not found"],
+    ["failed", "incoming transfer cannot be confirmed from status failed"],
+  ])("surfaces a %s transfer rejection from the atomic claim", async (_label, message) => {
+    const client = makeFetchClient({ rpcError: { message } });
     const adapter = createSupabaseAdapter({ client });
 
     await expect(
       adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
-    ).rejects.toThrow("확인할 수 있는 원본 전송을 찾지 못했어요");
-    expect(client.spies.operations).toEqual([]);
+    ).rejects.toThrow(`Supabase 원본 저장 확인 실패: ${message}`);
+    expect(client.spies.remove).not.toHaveBeenCalled();
   });
 
-  it("rejects an expired uploaded transfer before recording the copy", async () => {
+  it("surfaces an expired transfer rejection from the atomic claim", async () => {
     const client = makeFetchClient({
-      rows: { transfer_queue: [transferRow({ expires_at: "2026-07-21T01:02:03.000Z" })] },
+      rpcError: { message: "incoming transfer expired" },
     });
     const adapter = createSupabaseAdapter({ client });
 
     await expect(
       adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
-    ).rejects.toThrow("원본 전송이 만료되었어요");
-    expect(client.spies.operations).toEqual([]);
+    ).rejects.toThrow("Supabase 원본 저장 확인 실패: incoming transfer expired");
+    expect(client.spies.remove).not.toHaveBeenCalled();
   });
 
-  it("rejects a pathless transfer before recording or cleanup", async () => {
+  it("rejects a pathless RPC result before cleanup", async () => {
     const client = makeFetchClient({
-      rows: { transfer_queue: [transferRow({ tmp_path: " " })] },
+      rpcData: transferRow({ status: "landed", landed_location: "nyong_phone", tmp_path: "" }),
     });
     const adapter = createSupabaseAdapter({ client });
 
     await expect(
       adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
     ).rejects.toThrow("원본 전송 경로가 없어요");
-    expect(client.spies.operations).toEqual([]);
+    expect(client.spies.remove).not.toHaveBeenCalled();
   });
 
-  it("rejects a relay path owned by another transfer before mutation", async () => {
+  it("rejects a relay path owned by another transfer before cleanup", async () => {
     const client = makeFetchClient({
-      rows: {
-        transfer_queue: [transferRow({
-          tmp_path: "relay-originals/user-123/tr_other/gps.jpg",
-        })],
-      },
+      rpcData: transferRow({
+        status: "landed",
+        landed_location: "nyong_phone",
+        tmp_path: "relay-originals/user-123/tr_other/gps.jpg",
+      }),
     });
     const adapter = createSupabaseAdapter({ client });
 
     await expect(
       adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
     ).rejects.toThrow("원본 전송 경로가 올바르지 않아요");
-    expect(client.spies.operations).toEqual([]);
+    expect(client.spies.remove).not.toHaveBeenCalled();
   });
 
-  it("keeps the transfer uploaded when recipient-copy persistence fails", async () => {
+  it("keeps the relay original when the atomic copy claim fails", async () => {
     const client = makeFetchClient({
-      rows: { transfer_queue: [transferRow()] },
-      upsertErrors: { photo_copies: { message: "copy unavailable" } },
+      rpcError: { message: "copy unavailable" },
     });
     const adapter = createSupabaseAdapter({ client });
 
     await expect(
       adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
-    ).rejects.toThrow("Supabase 원본 사본 기록 실패: copy unavailable");
+    ).rejects.toThrow("Supabase 원본 저장 확인 실패: copy unavailable");
     expect(client.spies.updates).toEqual([]);
     expect(client.spies.remove).not.toHaveBeenCalled();
   });
 
-  it("keeps the relay original when the landed transition fails", async () => {
+  it("keeps the relay original when the atomic landed transition fails", async () => {
     const client = makeFetchClient({
-      rows: { transfer_queue: [transferRow()] },
-      updateErrors: { landed: { message: "landed unavailable" } },
+      rpcError: { message: "landed unavailable" },
     });
     const adapter = createSupabaseAdapter({ client });
 
     await expect(
       adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
-    ).rejects.toThrow("Supabase 원본 전송 도착 기록 실패: landed unavailable");
+    ).rejects.toThrow("Supabase 원본 저장 확인 실패: landed unavailable");
     expect(client.spies.remove).not.toHaveBeenCalled();
-    expect(client.spies.updates.map(({ payload }) => payload.status)).toEqual(["landed"]);
+    expect(client.spies.updates).toEqual([]);
   });
 
   it("leaves the transfer landed when relay deletion fails", async () => {
     const client = makeFetchClient({
-      rows: { transfer_queue: [transferRow()] },
+      rpcData: transferRow({ status: "landed", landed_location: "nyong_phone" }),
       removeError: { message: "remove unavailable" },
     });
     const adapter = createSupabaseAdapter({ client });
@@ -835,12 +860,12 @@ describe("supabaseAdapter recipient save confirmation", () => {
     await expect(
       adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
     ).rejects.toThrow("Supabase 임시 원본 삭제 실패: remove unavailable");
-    expect(client.spies.updates.map(({ payload }) => payload.status)).toEqual(["landed"]);
+    expect(client.spies.updates).toEqual([]);
   });
 
   it("does not report deleted when the final transition fails", async () => {
     const client = makeFetchClient({
-      rows: { transfer_queue: [transferRow()] },
+      rpcData: transferRow({ status: "landed", landed_location: "nyong_phone" }),
       updateErrors: { deleted: { message: "deleted unavailable" } },
     });
     const adapter = createSupabaseAdapter({ client });
@@ -852,7 +877,67 @@ describe("supabaseAdapter recipient save confirmation", () => {
       "relay-originals/user-123/tr_hash-123/gps.jpg",
     ]);
     expect(client.spies.updates.map(({ payload }) => payload.status))
-      .toEqual(["landed", "deleted"]);
+      .toEqual(["deleted"]);
+  });
+
+  it("does not report deleted when the conditional transition matches no row", async () => {
+    const client = makeFetchClient({
+      rpcData: transferRow({ status: "landed", landed_location: "nyong_phone" }),
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(
+      adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
+    ).rejects.toThrow("원본 전송 삭제 상태가 변경되지 않았어요");
+    expect(client.spies.updateFilters[0].filters).toEqual([
+      { column: "id", value: "tr_hash-123" },
+      { column: "status", value: "landed" },
+      { column: "landed_location", value: "nyong_phone" },
+    ]);
+  });
+
+  it("supports bara's phone as an explicit recipient location", async () => {
+    const client = makeFetchClient({
+      rpcData: transferRow({
+        source_owner: "nyong",
+        dest_owner: "bara",
+        status: "landed",
+        landed_location: "bara_phone",
+      }),
+      updateRows: { deleted: { id: "tr_hash-123" } },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(
+      adapter.confirmIncomingTransferSaved("tr_hash-123", "bara", "bara_phone"),
+    ).resolves.toEqual({
+      transferId: "tr_hash-123",
+      status: "deleted",
+      location: "bara_phone",
+    });
+  });
+
+  it.each([
+    ["another auth user", "relay-originals/user-999/tr_hash-123/gps.jpg"],
+    ["test original", "test-originals/user-123/tr_hash-123/gps.jpg"],
+    ["display derivative", "display/user-123/tr_hash-123/gps.jpg"],
+    ["thumbnail derivative", "thumb/user-123/tr_hash-123/gps.jpg"],
+    ["missing filename", "relay-originals/user-123/tr_hash-123/"],
+    ["extra path segment", "relay-originals/user-123/tr_hash-123/folder/gps.jpg"],
+  ])("rejects a %s cleanup path returned by the RPC", async (_label, tmpPath) => {
+    const client = makeFetchClient({
+      rpcData: transferRow({
+        status: "landed",
+        landed_location: "nyong_phone",
+        tmp_path: tmpPath,
+      }),
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(
+      adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
+    ).rejects.toThrow("원본 전송 경로가 올바르지 않아요");
+    expect(client.spies.remove).not.toHaveBeenCalled();
   });
 });
 

@@ -15,6 +15,7 @@
 - Keep the shared Supabase account and logical owners `bara` and `nyong`.
 - Delete only `transfer_queue.tmp_path`; never delete permanent display/thumb derivatives or record rows.
 - Mark a transfer `deleted` only after Storage removal succeeds; failures stay `landed` for retry.
+- Persist the explicit confirmation location in `transfer_queue.landed_location`; retries must use the same location.
 - Do not add Web/Mobile UI, scheduled cleanup, dependencies, secrets, or permanent original retention.
 - Live Supabase, browser save, operating-system save, and physical-device checks remain Local-only.
 
@@ -30,7 +31,7 @@
 - Consumes: existing `photo_copies(content_hash, owner, location, ...)` schema.
 - Produces: rerunnable exact unique index `photo_copies_unique_owner_location` on `(content_hash, location, owner)` for `upsert(..., { onConflict: "content_hash,location,owner" })`.
 
-- [ ] **Step 1: Write the failing schema source-contract test**
+- [x] **Step 1: Write the failing schema source-contract test**
 
 Add to the existing schema contract suite:
 
@@ -41,13 +42,13 @@ expect(sql).toContain(compactSql(`
 `));
 ```
 
-- [ ] **Step 2: Run the focused test to verify RED**
+- [x] **Step 2: Run the focused test to verify RED**
 
 Run: `npm test -- --run supabase/schema.test.js`
 
 Expected: FAIL because `photo_copies_unique_owner_location` is absent.
 
-- [ ] **Step 3: Add the rerunnable exact index**
+- [x] **Step 3: Add the rerunnable exact index**
 
 Immediately after the existing expression index in `supabase/schema.sql`, add:
 
@@ -58,13 +59,13 @@ on public.photo_copies (content_hash, location, owner);
 
 Keep `photo_copies_unique_location` unchanged so nullable shared-owner rows retain their existing uniqueness behavior.
 
-- [ ] **Step 4: Run the focused test to verify GREEN**
+- [x] **Step 4: Run the focused test to verify GREEN**
 
 Run: `npm test -- --run supabase/schema.test.js`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit the schema slice**
+- [x] **Step 5: Commit the schema slice**
 
 ```bash
 git add supabase/schema.sql supabase/schema.test.js
@@ -83,7 +84,7 @@ git commit -m "feat: support recipient copy upserts"
 - Consumes: `transfer_queue` rows with `uploaded | landed | deleted | failed`, private `photos` Storage, and the exact Task 1 upsert conflict target.
 - Produces: `confirmIncomingTransferSaved(transferId, owner, location) -> Promise<{ transferId, status: "deleted", location }>` on both adapter factory and lazy default adapter.
 
-- [ ] **Step 1: Extend the fetch-client double for ordered mutations**
+- [x] **Step 1: Extend the fetch-client double for ordered mutations**
 
 Extend `makeFetchClient` with configurable `upsertErrors`, `updateErrors`, and `removeError`, plus `upserts`, `updates`, `removes`, and `operations` spies. The mutation methods must return Supabase-shaped `{ data, error }` promises. Record these operation labels in call order:
 
@@ -102,7 +103,7 @@ const remove = vi.fn((paths) => Promise.resolve({
 }));
 ```
 
-- [ ] **Step 2: Write failing happy-path and retry tests**
+- [x] **Step 2: Write failing happy-path and retry tests**
 
 Freeze time at `2026-07-21T01:02:03.000Z` and assert:
 
@@ -137,7 +138,7 @@ Assert operation order is `upsert photo_copies`, `update landed`, `remove tmp_pa
 
 Add separate tests that `personal_pc` succeeds, a `landed` row skips the copy upsert and retries remove/update, and a `deleted` row returns success without any mutation or Storage call.
 
-- [ ] **Step 3: Write failing validation and failure-path tests**
+- [x] **Step 3: Write failing validation and failure-path tests**
 
 Assert all of these reject before unintended mutations:
 
@@ -162,13 +163,13 @@ deleted update      -> error surfaced after remove; row is not falsely reported 
 
 Use distinct Supabase errors and assert the Korean operation prefix so the failing step is visible.
 
-- [ ] **Step 4: Run the focused adapter tests to verify RED**
+- [x] **Step 4: Run the focused adapter tests to verify RED**
 
 Run: `npm test -- --run src/adapters/supabaseAdapter.test.js`
 
 Expected: FAIL because `confirmIncomingTransferSaved` and save-location validation do not exist.
 
-- [ ] **Step 5: Implement save-location validation**
+- [x] **Step 5: Implement save-location validation**
 
 Add a pure exported helper near `relayDestinationFor`:
 
@@ -188,15 +189,19 @@ export function recipientSaveLocationFor(owner, location) {
 }
 ```
 
-- [ ] **Step 6: Implement the adapter state machine**
+- [x] **Step 6: Implement the adapter state machine**
 
 Add `confirmIncomingTransferSaved` after signed-download creation. Validate location before session lookup, fetch by transfer id and destination owner, validate status in JavaScript, and implement:
 
 ```js
+if (row.status !== "uploaded" && row.landed_location !== confirmedLocation) {
+  throw new Error("저장 확인 위치가 기존 기록과 맞지 않아요");
+}
 if (row.status === "deleted") {
   return { transferId: row.id, status: "deleted", location: confirmedLocation };
 }
-if (!row.tmp_path?.trim()) throw new Error("원본 전송 경로가 없어요");
+const relayPath = row.tmp_path?.trim();
+if (!relayPath) throw new Error("원본 전송 경로가 없어요");
 
 if (row.status === "uploaded") {
   if (new Date(row.expires_at).getTime() <= Date.now()) {
@@ -217,13 +222,13 @@ if (row.status === "uploaded") {
     client,
     "transfer_queue",
     row.id,
-    { status: "landed" },
+    { status: "landed", landed_location: confirmedLocation },
     "Supabase 원본 전송 도착 기록 실패",
   );
 }
 
 assertSupabaseOk(
-  await client.storage.from(PHOTOS_BUCKET).remove([row.tmp_path]),
+  await client.storage.from(PHOTOS_BUCKET).remove([relayPath]),
   "Supabase 임시 원본 삭제 실패",
 );
 await updateById(
@@ -238,18 +243,121 @@ return { transferId: row.id, status: "deleted", location: confirmedLocation };
 
 Expose the same method on the lazy `supabaseAdapter`. Do not add best-effort catches; each failed durable step must remain observable.
 
-- [ ] **Step 7: Run focused adapter tests to verify GREEN**
+- [x] **Step 7: Run focused adapter tests to verify GREEN**
 
 Run: `npm test -- --run src/adapters/supabaseAdapter.test.js`
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit the adapter slice**
+- [x] **Step 8: Commit the adapter slice**
 
 ```bash
 git add src/adapters/supabaseAdapter.js src/adapters/supabaseAdapter.test.js
 git commit -m "feat: confirm recipient original saves"
 ```
+
+### Self-review correction: Durable retry location
+
+**Files:**
+- Modify: `supabase/schema.test.js`
+- Modify: `supabase/schema.sql`
+- Modify: `src/adapters/supabaseAdapter.test.js`
+- Modify: `src/adapters/supabaseAdapter.js`
+
+**Interfaces:**
+- Consumes: Task 2 explicit location and `landed`/`deleted` retry behavior.
+- Produces: constrained nullable `transfer_queue.landed_location` and retry-location equality enforcement.
+
+- [x] **Step 1: Write regression tests before the fix**
+
+Assert the schema persists only supported landing locations, the first `landed` update includes `landed_location`, and a `landed` cleanup retry with a different location rejects without removing Storage.
+
+- [x] **Step 2: Run focused tests to verify RED**
+
+Run `npm test -- --run supabase/schema.test.js` and `npm test -- --run src/adapters/supabaseAdapter.test.js`.
+
+Expected and observed: schema tests fail because the column/constraint are absent; adapter tests fail because the landed payload omits location and mismatched retry resolves.
+
+- [x] **Step 3: Implement the minimal durable-location fix**
+
+Add rerunnable `landed_location` schema migration/constraint, write it during the first `landed` transition, and reject later `landed`/`deleted` calls when the stored location differs.
+
+- [x] **Step 4: Run focused tests to verify GREEN**
+
+Expected and observed: schema 9/9 and adapter 57/57 tests pass.
+
+- [x] **Step 5: Commit the correction**
+
+Commit: `fix: preserve recipient landing location`.
+
+### Self-review correction: Transfer-scoped relay deletion
+
+**Files:**
+- Modify: `src/adapters/supabaseAdapter.test.js`
+- Modify: `src/adapters/supabaseAdapter.js`
+
+**Interfaces:**
+- Consumes: the authenticated session, selected transfer id, and persisted `tmp_path`.
+- Produces: cleanup that accepts only `relay-originals/<auth user>/<transfer id>/<filename>`.
+
+- [x] **Step 1: Write a regression test before the fix**
+
+Give the selected transfer another transfer's relay path and assert confirmation rejects without a copy upsert, state update, or Storage removal.
+
+- [x] **Step 2: Run the focused test to verify RED**
+
+Expected and observed: the call incorrectly resolves and removes the other transfer path.
+
+- [x] **Step 3: Implement exact relay path validation**
+
+Require four non-empty path segments with `relay-originals`, the authenticated user id, the selected transfer id, and one filename before any confirmation mutation.
+
+- [x] **Step 4: Run the focused test to verify GREEN**
+
+Expected and observed: adapter 58/58 tests pass.
+
+- [x] **Step 5: Commit the correction**
+
+Commit: `fix: scope relay cleanup path`.
+
+### Code-review correction: Atomic confirmation claim
+
+This correction supersedes Task 2's client-side select/upsert/update state machine while preserving its public API and product behavior.
+
+**Files:**
+- Modify: `supabase/schema.test.js`
+- Modify: `supabase/schema.sql`
+- Modify: `src/adapters/supabaseAdapter.test.js`
+- Modify: `src/adapters/supabaseAdapter.js`
+- Modify: `src/api.test.js`
+
+**Interfaces:**
+- Consumes: an authenticated recipient, transfer id, explicit save location, and the existing `photo_copies` identity.
+- Produces: an atomic `uploaded -> landed` claim plus a compare-and-set `landed -> deleted` cleanup record.
+
+- [x] **Step 1: Write schema tests for transactional ownership and migration safety**
+
+Require a security-invoker PostgreSQL function with an authenticated row lock, copy upsert, and `landed` update. Require DB owner/location invariants and a preflight that rejects ambiguous legacy `landed`/`deleted` rows without `landed_location`.
+
+- [x] **Step 2: Run the focused schema test to verify RED, then implement GREEN**
+
+Observed RED: 2 failures because the RPC and preflight/invariants were absent. Observed GREEN: 10/10.
+
+- [x] **Step 3: Move the durable claim behind the RPC**
+
+Replace the client-side select/upsert/update sequence with `confirm_incoming_transfer_landed`. The function locks the row, validates auth/owner/status/expiry/relay path, and commits the copy plus `landed_location` together.
+
+- [x] **Step 4: Make cleanup completion conditional**
+
+After Storage removal, update only the matching transfer id whose status is still `landed` and whose location matches. Require the update to return a row before reporting `deleted`.
+
+- [x] **Step 5: Expand boundary and retry regression tests**
+
+Cover both phone owners, personal PC, already-landed/deleted retries, RPC failures, zero-row final transition, and cleanup rejection for another user, another transfer, test-originals, display, thumb, missing filenames, and extra segments.
+
+- [x] **Step 6: Run focused tests to verify GREEN**
+
+Observed: schema 10/10, recipient confirmation 27/27, adapter 66/66, and shared API 2/2.
 
 ---
 
@@ -267,7 +375,7 @@ git commit -m "feat: confirm recipient original saves"
 - Consumes: Task 2 lazy adapter method.
 - Produces: shell-facing `confirmIncomingTransferSaved(transferId, owner, location)` with an explicit local-mode error and accurate Phase 3-3 documentation.
 
-- [ ] **Step 1: Write failing shared API tests**
+- [x] **Step 1: Write failing shared API tests**
 
 Extend the hoisted Supabase double with `upsert`, `update`, and Storage `remove` support, then assert:
 
@@ -291,13 +399,13 @@ expect(() => api.confirmIncomingTransferSaved(
 )).toThrow("Supabase 모드에서만 원본 전송 저장을 확인할 수 있어요.");
 ```
 
-- [ ] **Step 2: Run the focused API tests to verify RED**
+- [x] **Step 2: Run the focused API tests to verify RED**
 
 Run: `npm test -- --run src/api.test.js`
 
 Expected: FAIL because the shared API function is absent.
 
-- [ ] **Step 3: Implement the shared API guard and forward**
+- [x] **Step 3: Implement the shared API guard and forward**
 
 Add:
 
@@ -310,17 +418,17 @@ export function confirmIncomingTransferSaved(transferId, owner, location) {
 }
 ```
 
-- [ ] **Step 4: Run the focused API tests to verify GREEN**
+- [x] **Step 4: Run the focused API tests to verify GREEN**
 
 Run: `npm test -- --run src/api.test.js`
 
 Expected: PASS.
 
-- [ ] **Step 5: Update only completed-scope documentation**
+- [x] **Step 5: Update only completed-scope documentation**
 
 Record that Phase 3-3 now has an adapter/API contract for explicit recipient location, `photo_copies` persistence, `landed`, relay deletion, and `deleted`. Keep UI, real save verification, live Supabase migration/RLS/Storage, physical-device behavior, and Phase 3-4 scheduled cleanup explicitly outstanding.
 
-- [ ] **Step 6: Run full repository verification**
+- [x] **Step 6: Run full repository verification**
 
 ```bash
 npm test -- --run
@@ -331,7 +439,7 @@ git diff --check origin/main...HEAD
 
 Expected: 0 failures and no whitespace errors.
 
-- [ ] **Step 7: Self-review the complete branch diff**
+- [x] **Step 7: Self-review the complete branch diff**
 
 Run:
 
@@ -344,7 +452,7 @@ rg -n "service_role|SUPABASE_SERVICE|relay-originals|display/|thumb/" src supaba
 
 Confirm every removed Storage path comes from the validated transfer `tmp_path`, no secret was added, no original retention became permanent, and no UI/device success is claimed.
 
-- [ ] **Step 8: Mark this plan complete and commit documentation**
+- [x] **Step 8: Mark this plan complete and commit documentation**
 
 Check completed steps in this plan, then:
 

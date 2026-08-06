@@ -74,6 +74,9 @@ export function buildRelayOriginalPath(userId, transferId, item) {
 }
 
 function assertRelayOriginalPath(path, userId, transferId) {
+  if (typeof path !== "string" || path !== path.trim()) {
+    throw new Error("원본 전송 경로가 올바르지 않아요");
+  }
   const parts = path.split("/");
   if (
     parts.length !== 4
@@ -84,7 +87,6 @@ function assertRelayOriginalPath(path, userId, transferId) {
   ) {
     throw new Error("원본 전송 경로가 올바르지 않아요");
   }
-  return path;
 }
 
 function normalizeUploadItem(item) {
@@ -550,62 +552,40 @@ export function createSupabaseAdapter({ client = createSupabaseClient(), prepare
       const session = assertSupabaseOk(sessionResult, "Supabase 세션 확인 실패")?.session;
       if (!session?.user) throw new Error("Supabase 로그인이 필요해요");
       const row = assertSupabaseOk(
-        await client.from("transfer_queue")
-          .select("*")
-          .eq("id", transferId)
-          .eq("dest_owner", owner)
-          .maybeSingle(),
-        "Supabase 원본 전송 조회 실패",
+        await client.rpc("confirm_incoming_transfer_landed", {
+          p_transfer_id: transferId,
+          p_owner: owner,
+          p_location: confirmedLocation,
+        }),
+        "Supabase 원본 저장 확인 실패",
       );
-      if (!row || !["uploaded", "landed", "deleted"].includes(row.status)) {
-        throw new Error("확인할 수 있는 원본 전송을 찾지 못했어요");
-      }
-      if (row.status !== "uploaded" && row.landed_location !== confirmedLocation) {
-        throw new Error("저장 확인 위치가 기존 기록과 맞지 않아요");
-      }
+      if (!row) throw new Error("원본 저장 확인 결과가 없어요");
       if (row.status === "deleted") {
         return { transferId: row.id, status: "deleted", location: confirmedLocation };
       }
+      if (row.status !== "landed" || row.landed_location !== confirmedLocation) {
+        throw new Error("원본 저장 확인 결과가 올바르지 않아요");
+      }
 
-      const relayPath = row.tmp_path?.trim();
+      const relayPath = row.tmp_path;
       if (!relayPath) throw new Error("원본 전송 경로가 없어요");
       assertRelayOriginalPath(relayPath, session.user.id, row.id);
-
-      if (row.status === "uploaded") {
-        if (new Date(row.expires_at).getTime() <= Date.now()) {
-          throw new Error("원본 전송이 만료되었어요");
-        }
-        assertSupabaseOk(
-          await client.from("photo_copies").upsert({
-            content_hash: row.content_hash,
-            owner,
-            location: confirmedLocation,
-            status: "present",
-            path: null,
-            checked_at: new Date().toISOString(),
-          }, { onConflict: "content_hash,location,owner" }),
-          "Supabase 원본 사본 기록 실패",
-        );
-        await updateById(
-          client,
-          "transfer_queue",
-          row.id,
-          { status: "landed", landed_location: confirmedLocation },
-          "Supabase 원본 전송 도착 기록 실패",
-        );
-      }
 
       assertSupabaseOk(
         await client.storage.from(PHOTOS_BUCKET).remove([relayPath]),
         "Supabase 임시 원본 삭제 실패",
       );
-      await updateById(
-        client,
-        "transfer_queue",
-        row.id,
-        { status: "deleted" },
+      const deleted = assertSupabaseOk(
+        await client.from("transfer_queue")
+          .update({ status: "deleted" })
+          .eq("id", row.id)
+          .eq("status", "landed")
+          .eq("landed_location", confirmedLocation)
+          .select("id")
+          .maybeSingle(),
         "Supabase 원본 전송 삭제 기록 실패",
       );
+      if (!deleted) throw new Error("원본 전송 삭제 상태가 변경되지 않았어요");
       return { transferId: row.id, status: "deleted", location: confirmedLocation };
     },
 

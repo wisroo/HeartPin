@@ -19,6 +19,15 @@ const supabaseDouble = vi.hoisted(() => {
     data: { signedUrl: "https://signed.example/original" },
     error: null,
   });
+  const remove = vi.fn().mockResolvedValue({ data: null, error: null });
+  const rpc = vi.fn().mockResolvedValue({
+    data: {
+      ...transferFixture,
+      status: "landed",
+      landed_location: "nyong_phone",
+    },
+    error: null,
+  });
 
   function transferQuery() {
     return {
@@ -36,11 +45,25 @@ const supabaseDouble = vi.hoisted(() => {
         data: transferFixture,
         error: null,
       }),
+      upsert: vi.fn().mockResolvedValue({ data: null, error: null }),
+      update: vi.fn(() => {
+        const mutation = {
+          eq: vi.fn(() => mutation),
+          select: vi.fn(() => mutation),
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: { id: transferFixture.id },
+            error: null,
+          }),
+        };
+        return mutation;
+      }),
     };
   }
 
   return {
     createSignedUrl,
+    remove,
+    rpc,
     client: {
       auth: {
         getSession: vi.fn().mockResolvedValue({
@@ -48,9 +71,10 @@ const supabaseDouble = vi.hoisted(() => {
           error: null,
         }),
       },
+      rpc,
       from: vi.fn(() => transferQuery()),
       storage: {
-        from: vi.fn(() => ({ createSignedUrl })),
+        from: vi.fn(() => ({ createSignedUrl, remove })),
       },
     },
   };
@@ -69,6 +93,8 @@ async function loadApi(mode) {
 beforeEach(() => {
   vi.unstubAllEnvs();
   supabaseDouble.createSignedUrl.mockClear();
+  supabaseDouble.remove.mockClear();
+  supabaseDouble.rpc.mockClear();
   supabaseDouble.client.auth.getSession.mockClear();
   supabaseDouble.client.from.mockClear();
   supabaseDouble.client.storage.from.mockClear();
@@ -106,6 +132,24 @@ describe("recipient transfer API seam", () => {
       300,
       { download: "gps.jpg" },
     );
+    await expect(
+      api.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
+    ).resolves.toEqual({
+      transferId: "tr_hash-123",
+      status: "deleted",
+      location: "nyong_phone",
+    });
+    expect(supabaseDouble.remove).toHaveBeenCalledWith([
+      "relay-originals/user-123/tr_hash-123/gps.jpg",
+    ]);
+    expect(supabaseDouble.rpc).toHaveBeenCalledWith(
+      "confirm_incoming_transfer_landed",
+      {
+        p_transfer_id: "tr_hash-123",
+        p_owner: "nyong",
+        p_location: "nyong_phone",
+      },
+    );
   });
 
   test("local mode rejects recipient transfer operations explicitly", async () => {
@@ -115,5 +159,10 @@ describe("recipient transfer API seam", () => {
       .toThrow("Supabase 모드에서만 원본 전송을 받을 수 있어요.");
     expect(() => api.createIncomingTransferDownload("tr_hash-123", "nyong"))
       .toThrow("Supabase 모드에서만 원본 전송을 받을 수 있어요.");
+    expect(() => api.confirmIncomingTransferSaved(
+      "tr_hash-123",
+      "nyong",
+      "nyong_phone",
+    )).toThrow("Supabase 모드에서만 원본 전송 저장을 확인할 수 있어요.");
   });
 });
