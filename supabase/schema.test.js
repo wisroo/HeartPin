@@ -32,8 +32,19 @@ describe("Phase 3 original relay schema", () => {
     expect(transferTable).toContain("user_id uuid not null references auth.users(id) on delete cascade");
     expect(transferTable).toContain("source_owner text not null");
     expect(transferTable).toContain("dest_owner text not null");
+    expect(transferTable).toContain("landed_location text");
     expect(transferTable).toContain("original_name text not null");
     expect(transferTable).not.toContain("dest text not null");
+  });
+
+  it("persists only supported recipient landing locations", () => {
+    const compact = compactSql(schema);
+
+    expect(compact).toContain("alter table public.transfer_queue add column if not exists landed_location text;");
+    expect(compact).toContain(compactSql(`
+      constraint transfer_queue_landed_location_check
+      check (landed_location is null or landed_location in ('bara_phone', 'nyong_phone', 'personal_pc'))
+    `));
   });
 
   it("owns transfer creation and expiry timestamps on insert and update", () => {

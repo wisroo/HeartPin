@@ -208,6 +208,7 @@ function transferRow(overrides = {}) {
     original_size: 3,
     mime_type: "image/jpeg",
     status: "uploaded",
+    landed_location: null,
     expires_at: "2026-07-28T01:02:03.000Z",
     created_at: "2026-07-21T01:02:03.000Z",
     updated_at: "2026-07-21T01:02:03.000Z",
@@ -621,7 +622,11 @@ describe("supabaseAdapter recipient save confirmation", () => {
     }]);
     expect(client.spies.operations).toEqual([
       expect.objectContaining({ type: "upsert", table: "photo_copies" }),
-      { type: "update", table: "transfer_queue", payload: { status: "landed" } },
+      {
+        type: "update",
+        table: "transfer_queue",
+        payload: { status: "landed", landed_location: "nyong_phone" },
+      },
       {
         type: "remove",
         paths: ["relay-originals/user-123/tr_hash-123/gps.jpg"],
@@ -646,7 +651,12 @@ describe("supabaseAdapter recipient save confirmation", () => {
 
   it("retries cleanup from landed without writing a second copy", async () => {
     const client = makeFetchClient({
-      rows: { transfer_queue: [transferRow({ status: "landed" })] },
+      rows: {
+        transfer_queue: [transferRow({
+          status: "landed",
+          landed_location: "nyong_phone",
+        })],
+      },
     });
     const adapter = createSupabaseAdapter({ client });
 
@@ -669,7 +679,12 @@ describe("supabaseAdapter recipient save confirmation", () => {
 
   it("returns an already deleted confirmation without another mutation", async () => {
     const client = makeFetchClient({
-      rows: { transfer_queue: [transferRow({ status: "deleted" })] },
+      rows: {
+        transfer_queue: [transferRow({
+          status: "deleted",
+          landed_location: "nyong_phone",
+        })],
+      },
     });
     const adapter = createSupabaseAdapter({ client });
 
@@ -680,6 +695,23 @@ describe("supabaseAdapter recipient save confirmation", () => {
       status: "deleted",
       location: "nyong_phone",
     });
+    expect(client.spies.operations).toEqual([]);
+  });
+
+  it("rejects a cleanup retry with a different landing location", async () => {
+    const client = makeFetchClient({
+      rows: {
+        transfer_queue: [transferRow({
+          status: "landed",
+          landed_location: "nyong_phone",
+        })],
+      },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(
+      adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "personal_pc"),
+    ).rejects.toThrow("저장 확인 위치가 기존 기록과 맞지 않아요");
     expect(client.spies.operations).toEqual([]);
   });
 

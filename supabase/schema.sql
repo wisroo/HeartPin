@@ -116,6 +116,9 @@ create table if not exists public.transfer_queue (
     constraint transfer_queue_source_owner_check check (source_owner in ('bara', 'nyong')),
   dest_owner text not null
     constraint transfer_queue_dest_owner_check check (dest_owner in ('bara', 'nyong')),
+  landed_location text
+    constraint transfer_queue_landed_location_check
+    check (landed_location is null or landed_location in ('bara_phone', 'nyong_phone', 'personal_pc')),
   tmp_path text,
   original_name text not null,
   original_size bigint,
@@ -189,6 +192,7 @@ $$;
 alter table public.transfer_queue add column if not exists user_id uuid;
 alter table public.transfer_queue add column if not exists source_owner text;
 alter table public.transfer_queue add column if not exists dest_owner text;
+alter table public.transfer_queue add column if not exists landed_location text;
 alter table public.transfer_queue add column if not exists original_name text;
 alter table public.transfer_queue add column if not exists original_size bigint;
 alter table public.transfer_queue add column if not exists mime_type text;
@@ -258,6 +262,9 @@ alter table public.transfer_queue add constraint transfer_queue_source_owner_che
 alter table public.transfer_queue drop constraint if exists transfer_queue_dest_owner_check;
 alter table public.transfer_queue add constraint transfer_queue_dest_owner_check
   check (dest_owner in ('bara', 'nyong'));
+alter table public.transfer_queue drop constraint if exists transfer_queue_landed_location_check;
+alter table public.transfer_queue add constraint transfer_queue_landed_location_check
+  check (landed_location is null or landed_location in ('bara_phone', 'nyong_phone', 'personal_pc'));
 alter table public.transfer_queue drop constraint if exists transfer_queue_distinct_owners;
 alter table public.transfer_queue add constraint transfer_queue_distinct_owners
   check (source_owner <> dest_owner);

@@ -546,6 +546,9 @@ export function createSupabaseAdapter({ client = createSupabaseClient(), prepare
       if (!row || !["uploaded", "landed", "deleted"].includes(row.status)) {
         throw new Error("확인할 수 있는 원본 전송을 찾지 못했어요");
       }
+      if (row.status !== "uploaded" && row.landed_location !== confirmedLocation) {
+        throw new Error("저장 확인 위치가 기존 기록과 맞지 않아요");
+      }
       if (row.status === "deleted") {
         return { transferId: row.id, status: "deleted", location: confirmedLocation };
       }
@@ -572,7 +575,7 @@ export function createSupabaseAdapter({ client = createSupabaseClient(), prepare
           client,
           "transfer_queue",
           row.id,
-          { status: "landed" },
+          { status: "landed", landed_location: confirmedLocation },
           "Supabase 원본 전송 도착 기록 실패",
         );
       }
