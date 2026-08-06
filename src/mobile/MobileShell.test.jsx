@@ -25,9 +25,6 @@ vi.mock("./screens/map/MobileMapScreen.jsx", () => ({
 vi.mock("./screens/InboxScreen.jsx", () => ({
   default: () => <div>정리함화면</div>,
 }));
-vi.mock("./screens/ProfileScreen.jsx", () => ({
-  default: () => <div>프로필화면</div>,
-}));
 vi.mock("./overlays/MomentViewer.jsx", () => ({
   default: () => <div>모멘트뷰어</div>,
 }));
@@ -43,7 +40,16 @@ vi.mock("./overlays/CoupleScreen.jsx", () => ({
 vi.mock("./overlays/UploadSheet.jsx", () => ({
   default: () => <div>업로드시트</div>,
 }));
+vi.mock("./overlays/RecipientTransfersScreen.jsx", () => ({
+  default: ({ nav, owner }) => (
+    <div>
+      <span>받을 원본 화면:{owner}</span>
+      <button onClick={nav.back}>받을 원본 닫기</button>
+    </div>
+  ),
+}));
 vi.mock("./ui/MobileAtoms.jsx", () => ({
+  Avatar: ({ who }) => <span>{who}</span>,
   Ico: new Proxy(
     {},
     { get: () => () => null }
@@ -104,4 +110,21 @@ test("Journey detail can open a requested trip and spot directly", () => {
   fireEvent.click(screen.getByText("여정"));
   fireEvent.click(screen.getByText("지도"));
   expect(screen.getByText("지도:overview")).toBeInTheDocument();
+});
+
+test("Profile opens recipient transfers for the active owner and returns", () => {
+  render(
+    <MobileShell
+      app={emptyApp}
+      settings={{ ...settings, myChar: "nyong", mapSkin: "cozy", alerts: true }}
+      setSettings={() => {}}
+    />,
+  );
+
+  fireEvent.click(screen.getByText("프로필"));
+  fireEvent.click(screen.getByRole("button", { name: /받을 원본/ }));
+  expect(screen.getByText("받을 원본 화면:nyong")).toBeInTheDocument();
+
+  fireEvent.click(screen.getByText("받을 원본 닫기"));
+  expect(screen.getByText("우리")).toBeInTheDocument();
 });
