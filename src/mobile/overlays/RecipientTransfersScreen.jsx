@@ -66,18 +66,20 @@ export default function RecipientTransfersScreen({
     let alive = true;
     setLoadState("loading");
     setLoadError(null);
-    api.listIncomingTransfers(owner).then(
-      (rows) => {
-        if (!alive) return;
-        setTransfers(rows);
-        setLoadState("ready");
-      },
-      (error) => {
-        if (!alive) return;
-        setLoadError(error.message);
-        setLoadState("error");
-      },
-    );
+    Promise.resolve()
+      .then(() => api.listIncomingTransfers(owner))
+      .then(
+        (rows) => {
+          if (!alive) return;
+          setTransfers(rows);
+          setLoadState("ready");
+        },
+        (error) => {
+          if (!alive) return;
+          setLoadError(error.message);
+          setLoadState("error");
+        },
+      );
     return () => {
       alive = false;
     };

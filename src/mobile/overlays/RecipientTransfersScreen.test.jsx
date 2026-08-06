@@ -82,7 +82,9 @@ describe("RecipientTransfersScreen read states", () => {
 
   it("retries a failed list load", async () => {
     api.listIncomingTransfers
-      .mockRejectedValueOnce(new Error("목록을 불러오지 못했어요"))
+      .mockImplementationOnce(() => {
+        throw new Error("목록을 불러오지 못했어요");
+      })
       .mockResolvedValueOnce([transfer]);
 
     render(<RecipientTransfersScreen nav={makeNav()} owner="nyong" />);

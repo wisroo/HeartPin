@@ -639,7 +639,7 @@ h1,h2,h3{font-family:var(--fd);font-weight:400;letter-spacing:.01em;}
 .hpm-btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--pd);}
 .hpm-btn.block{width:100%;}
 .hpm-btn.ghost{background:var(--card);color:var(--ink);box-shadow:0 4px 0 var(--line2);border:1.5px solid var(--line2);}
-.hpm-btn:disabled{opacity:.58;cursor:not-allowed;box-shadow:none;transform:none;}
+.hpm-receive-card .hpm-btn:disabled{opacity:.58;cursor:not-allowed;box-shadow:none;transform:none;}
 
 /* recipient originals */
 .hpm-receive-pad{padding-bottom:calc(env(safe-area-inset-bottom) + 28px);}
