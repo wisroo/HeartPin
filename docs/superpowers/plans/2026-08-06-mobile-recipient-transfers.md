@@ -276,7 +276,7 @@ git add README.md docs/ROADMAP.md docs/superpowers/specs/2026-07-17-automatic-or
 git commit -m "docs: record mobile recipient transfers"
 ```
 
-- [ ] **Step 5: Prepare a Draft PR without merging**
+- [x] **Step 5: Prepare a Draft PR without merging**
 
 Push `feature/mobile-recipient-transfers` and open a Draft PR targeting `main`. Include automated verification, the browser-save evidence boundary, Local-only steps, and the no-auto-merge gate. Add `codex` and `codex-automation` labels only if they exist.
 
