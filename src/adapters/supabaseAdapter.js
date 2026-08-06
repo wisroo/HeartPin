@@ -6,6 +6,7 @@ const SIGNED_URL_SECONDS = 60 * 60;
 const RELAY_SIGNED_URL_SECONDS = 5 * 60;
 const RELAY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const EDITABLE_SPOT_FIELDS = new Set(["name", "time", "mood", "guide", "reaction"]);
+const RECIPIENT_SAVE_LOCATIONS = new Set(["bara_phone", "nyong_phone", "personal_pc"]);
 
 function emptyState() {
   return {
@@ -54,6 +55,18 @@ export function relayDestinationFor(owner) {
   if (owner === "bara") return "nyong";
   if (owner === "nyong") return "bara";
   throw new Error("사진 owner는 bara 또는 nyong이어야 해요");
+}
+
+export function recipientSaveLocationFor(owner, location) {
+  relayDestinationFor(owner);
+  if (!RECIPIENT_SAVE_LOCATIONS.has(location)) {
+    throw new Error("지원하지 않는 원본 저장 위치예요");
+  }
+  const expectedPhone = owner === "bara" ? "bara_phone" : "nyong_phone";
+  if (location !== "personal_pc" && location !== expectedPhone) {
+    throw new Error("원본 저장 위치가 수령자와 맞지 않아요");
+  }
+  return location;
 }
 
 export function buildRelayOriginalPath(userId, transferId, item) {
@@ -517,6 +530,67 @@ export function createSupabaseAdapter({ client = createSupabaseClient(), prepare
       };
     },
 
+    async confirmIncomingTransferSaved(transferId, owner, location) {
+      const confirmedLocation = recipientSaveLocationFor(owner, location);
+      const sessionResult = await client.auth.getSession();
+      const session = assertSupabaseOk(sessionResult, "Supabase 세션 확인 실패")?.session;
+      if (!session?.user) throw new Error("Supabase 로그인이 필요해요");
+      const row = assertSupabaseOk(
+        await client.from("transfer_queue")
+          .select("*")
+          .eq("id", transferId)
+          .eq("dest_owner", owner)
+          .maybeSingle(),
+        "Supabase 원본 전송 조회 실패",
+      );
+      if (!row || !["uploaded", "landed", "deleted"].includes(row.status)) {
+        throw new Error("확인할 수 있는 원본 전송을 찾지 못했어요");
+      }
+      if (row.status === "deleted") {
+        return { transferId: row.id, status: "deleted", location: confirmedLocation };
+      }
+
+      const relayPath = row.tmp_path?.trim();
+      if (!relayPath) throw new Error("원본 전송 경로가 없어요");
+
+      if (row.status === "uploaded") {
+        if (new Date(row.expires_at).getTime() <= Date.now()) {
+          throw new Error("원본 전송이 만료되었어요");
+        }
+        assertSupabaseOk(
+          await client.from("photo_copies").upsert({
+            content_hash: row.content_hash,
+            owner,
+            location: confirmedLocation,
+            status: "present",
+            path: null,
+            checked_at: new Date().toISOString(),
+          }, { onConflict: "content_hash,location,owner" }),
+          "Supabase 원본 사본 기록 실패",
+        );
+        await updateById(
+          client,
+          "transfer_queue",
+          row.id,
+          { status: "landed" },
+          "Supabase 원본 전송 도착 기록 실패",
+        );
+      }
+
+      assertSupabaseOk(
+        await client.storage.from(PHOTOS_BUCKET).remove([relayPath]),
+        "Supabase 임시 원본 삭제 실패",
+      );
+      await updateById(
+        client,
+        "transfer_queue",
+        row.id,
+        { status: "deleted" },
+        "Supabase 원본 전송 삭제 기록 실패",
+      );
+      return { transferId: row.id, status: "deleted", location: confirmedLocation };
+    },
+
     async uploadPhotos(items, owner, onProgress) {
       const sessionResult = await client.auth.getSession();
       const session = assertSupabaseOk(sessionResult, "Supabase 세션 확인 실패")?.session;
@@ -825,6 +899,7 @@ export const supabaseAdapter = {
   fetchState: (...args) => getDefaultAdapter().fetchState(...args),
   listIncomingTransfers: (...args) => getDefaultAdapter().listIncomingTransfers(...args),
   createIncomingTransferDownload: (...args) => getDefaultAdapter().createIncomingTransferDownload(...args),
+  confirmIncomingTransferSaved: (...args) => getDefaultAdapter().confirmIncomingTransferSaved(...args),
   uploadPhotos: (...args) => getDefaultAdapter().uploadPhotos(...args),
   placePhotos: (...args) => getDefaultAdapter().placePhotos(...args),
   addTrip: (...args) => getDefaultAdapter().addTrip(...args),

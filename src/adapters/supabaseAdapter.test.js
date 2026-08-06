@@ -84,12 +84,25 @@ function preparedUpload(overrides = {}) {
   };
 }
 
-function makeFetchClient({ user = { id: "user-123" }, rows = {}, signedUrlErrors = {} } = {}) {
+function makeFetchClient({
+  user = { id: "user-123" },
+  rows = {},
+  signedUrlErrors = {},
+  upsertErrors = {},
+  updateErrors = {},
+  removeError = null,
+} = {}) {
+  const operations = [];
   const createSignedUrl = vi.fn((path) => Promise.resolve({
     data: { signedUrl: `https://signed.example/${path}` },
     error: signedUrlErrors[path] || null,
   }));
+  const remove = vi.fn((paths) => {
+    operations.push({ type: "remove", paths });
+    return Promise.resolve({ data: null, error: removeError });
+  });
   const queries = [];
+  const upserts = [];
   const updates = [];
   const deletes = [];
   const inserts = [];
@@ -99,7 +112,7 @@ function makeFetchClient({ user = { id: "user-123" }, rows = {}, signedUrlErrors
       getSession: vi.fn().mockResolvedValue({ data: { session: user ? { user } : null }, error: null }),
     },
     storage: {
-      from: vi.fn().mockReturnValue({ createSignedUrl }),
+      from: vi.fn().mockReturnValue({ createSignedUrl, remove }),
     },
     from: vi.fn((table) => {
       const filters = [];
@@ -131,10 +144,19 @@ function makeFetchClient({ user = { id: "user-123" }, rows = {}, signedUrlErrors
           inserts.push({ table, payload });
           return Promise.resolve({ data: null, error: null });
         }),
+        upsert: vi.fn((payload, options) => {
+          upserts.push({ table, payload, options });
+          operations.push({ type: "upsert", table, payload, options });
+          return Promise.resolve({ data: null, error: upsertErrors[table] || null });
+        }),
         update: vi.fn((payload) => ({
           eq: vi.fn((column, value) => {
             updates.push({ table, payload, column, value });
-            return Promise.resolve({ data: null, error: null });
+            operations.push({ type: "update", table, payload });
+            return Promise.resolve({
+              data: null,
+              error: updateErrors[payload.status] || updateErrors[table] || null,
+            });
           }),
           in: vi.fn((column, value) => {
             updates.push({ table, payload, column, value });
@@ -161,7 +183,16 @@ function makeFetchClient({ user = { id: "user-123" }, rows = {}, signedUrlErrors
       queries.push({ table, query });
       return query;
     }),
-    spies: { createSignedUrl, queries, updates, deletes, inserts },
+    spies: {
+      createSignedUrl,
+      remove,
+      queries,
+      upserts,
+      updates,
+      deletes,
+      inserts,
+      operations,
+    },
   };
 }
 
@@ -551,6 +582,229 @@ describe("supabaseAdapter incoming transfers", () => {
 
     await expect(adapter.createIncomingTransferDownload("tr_hash-123", "nyong"))
       .rejects.toThrow("Supabase 원본 다운로드 URL 생성 실패: signing unavailable");
+  });
+});
+
+describe("supabaseAdapter recipient save confirmation", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime("2026-07-21T01:02:03.000Z");
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("records the recipient copy before deleting only the relay original", async () => {
+    const client = makeFetchClient({ rows: { transfer_queue: [transferRow()] } });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(
+      adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
+    ).resolves.toEqual({
+      transferId: "tr_hash-123",
+      status: "deleted",
+      location: "nyong_phone",
+    });
+
+    expect(client.spies.upserts).toEqual([{
+      table: "photo_copies",
+      payload: {
+        content_hash: "hash-123",
+        owner: "nyong",
+        location: "nyong_phone",
+        status: "present",
+        path: null,
+        checked_at: "2026-07-21T01:02:03.000Z",
+      },
+      options: { onConflict: "content_hash,location,owner" },
+    }]);
+    expect(client.spies.operations).toEqual([
+      expect.objectContaining({ type: "upsert", table: "photo_copies" }),
+      { type: "update", table: "transfer_queue", payload: { status: "landed" } },
+      {
+        type: "remove",
+        paths: ["relay-originals/user-123/tr_hash-123/gps.jpg"],
+      },
+      { type: "update", table: "transfer_queue", payload: { status: "deleted" } },
+    ]);
+  });
+
+  it("records personal PC as an explicit recipient location", async () => {
+    const client = makeFetchClient({ rows: { transfer_queue: [transferRow()] } });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(
+      adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "personal_pc"),
+    ).resolves.toEqual({
+      transferId: "tr_hash-123",
+      status: "deleted",
+      location: "personal_pc",
+    });
+    expect(client.spies.upserts[0].payload.location).toBe("personal_pc");
+  });
+
+  it("retries cleanup from landed without writing a second copy", async () => {
+    const client = makeFetchClient({
+      rows: { transfer_queue: [transferRow({ status: "landed" })] },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(
+      adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
+    ).resolves.toEqual({
+      transferId: "tr_hash-123",
+      status: "deleted",
+      location: "nyong_phone",
+    });
+    expect(client.spies.upserts).toEqual([]);
+    expect(client.spies.operations).toEqual([
+      {
+        type: "remove",
+        paths: ["relay-originals/user-123/tr_hash-123/gps.jpg"],
+      },
+      { type: "update", table: "transfer_queue", payload: { status: "deleted" } },
+    ]);
+  });
+
+  it("returns an already deleted confirmation without another mutation", async () => {
+    const client = makeFetchClient({
+      rows: { transfer_queue: [transferRow({ status: "deleted" })] },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(
+      adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
+    ).resolves.toEqual({
+      transferId: "tr_hash-123",
+      status: "deleted",
+      location: "nyong_phone",
+    });
+    expect(client.spies.operations).toEqual([]);
+  });
+
+  it.each([
+    ["unsupported owner", "shared", "personal_pc", "사진 owner는 bara 또는 nyong이어야 해요"],
+    ["unsupported location", "nyong", "external_drive", "지원하지 않는 원본 저장 위치예요"],
+    ["mismatched phone", "nyong", "bara_phone", "원본 저장 위치가 수령자와 맞지 않아요"],
+  ])("rejects an %s before authentication", async (_label, owner, location, message) => {
+    const client = makeFetchClient({ rows: { transfer_queue: [transferRow()] } });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(
+      adapter.confirmIncomingTransferSaved("tr_hash-123", owner, location),
+    ).rejects.toThrow(message);
+    expect(client.auth.getSession).not.toHaveBeenCalled();
+    expect(client.spies.operations).toEqual([]);
+  });
+
+  it("requires a Supabase session before confirming a save", async () => {
+    const client = makeFetchClient({
+      user: null,
+      rows: { transfer_queue: [transferRow()] },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(
+      adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
+    ).rejects.toThrow("Supabase 로그인이 필요해요");
+    expect(client.spies.operations).toEqual([]);
+  });
+
+  it.each([
+    ["missing", []],
+    ["another recipient", [transferRow({ dest_owner: "bara" })]],
+    ["failed", [transferRow({ status: "failed" })]],
+  ])("rejects a %s transfer without mutation", async (_label, transferRows) => {
+    const client = makeFetchClient({ rows: { transfer_queue: transferRows } });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(
+      adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
+    ).rejects.toThrow("확인할 수 있는 원본 전송을 찾지 못했어요");
+    expect(client.spies.operations).toEqual([]);
+  });
+
+  it("rejects an expired uploaded transfer before recording the copy", async () => {
+    const client = makeFetchClient({
+      rows: { transfer_queue: [transferRow({ expires_at: "2026-07-21T01:02:03.000Z" })] },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(
+      adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
+    ).rejects.toThrow("원본 전송이 만료되었어요");
+    expect(client.spies.operations).toEqual([]);
+  });
+
+  it("rejects a pathless transfer before recording or cleanup", async () => {
+    const client = makeFetchClient({
+      rows: { transfer_queue: [transferRow({ tmp_path: " " })] },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(
+      adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
+    ).rejects.toThrow("원본 전송 경로가 없어요");
+    expect(client.spies.operations).toEqual([]);
+  });
+
+  it("keeps the transfer uploaded when recipient-copy persistence fails", async () => {
+    const client = makeFetchClient({
+      rows: { transfer_queue: [transferRow()] },
+      upsertErrors: { photo_copies: { message: "copy unavailable" } },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(
+      adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
+    ).rejects.toThrow("Supabase 원본 사본 기록 실패: copy unavailable");
+    expect(client.spies.updates).toEqual([]);
+    expect(client.spies.remove).not.toHaveBeenCalled();
+  });
+
+  it("keeps the relay original when the landed transition fails", async () => {
+    const client = makeFetchClient({
+      rows: { transfer_queue: [transferRow()] },
+      updateErrors: { landed: { message: "landed unavailable" } },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(
+      adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
+    ).rejects.toThrow("Supabase 원본 전송 도착 기록 실패: landed unavailable");
+    expect(client.spies.remove).not.toHaveBeenCalled();
+    expect(client.spies.updates.map(({ payload }) => payload.status)).toEqual(["landed"]);
+  });
+
+  it("leaves the transfer landed when relay deletion fails", async () => {
+    const client = makeFetchClient({
+      rows: { transfer_queue: [transferRow()] },
+      removeError: { message: "remove unavailable" },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(
+      adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
+    ).rejects.toThrow("Supabase 임시 원본 삭제 실패: remove unavailable");
+    expect(client.spies.updates.map(({ payload }) => payload.status)).toEqual(["landed"]);
+  });
+
+  it("does not report deleted when the final transition fails", async () => {
+    const client = makeFetchClient({
+      rows: { transfer_queue: [transferRow()] },
+      updateErrors: { deleted: { message: "deleted unavailable" } },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(
+      adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
+    ).rejects.toThrow("Supabase 원본 전송 삭제 기록 실패: deleted unavailable");
+    expect(client.spies.remove).toHaveBeenCalledWith([
+      "relay-originals/user-123/tr_hash-123/gps.jpg",
+    ]);
+    expect(client.spies.updates.map(({ payload }) => payload.status))
+      .toEqual(["landed", "deleted"]);
   });
 });
 
