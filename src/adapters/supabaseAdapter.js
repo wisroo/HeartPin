@@ -73,6 +73,20 @@ export function buildRelayOriginalPath(userId, transferId, item) {
   return `relay-originals/${userId}/${transferId}/${safeBaseName(item.name || item.file?.name)}.${extensionFor(item)}`;
 }
 
+function assertRelayOriginalPath(path, userId, transferId) {
+  const parts = path.split("/");
+  if (
+    parts.length !== 4
+    || parts[0] !== "relay-originals"
+    || parts[1] !== userId
+    || parts[2] !== transferId
+    || !parts[3]
+  ) {
+    throw new Error("원본 전송 경로가 올바르지 않아요");
+  }
+  return path;
+}
+
 function normalizeUploadItem(item) {
   if (item.file) return item;
   return {
@@ -555,6 +569,7 @@ export function createSupabaseAdapter({ client = createSupabaseClient(), prepare
 
       const relayPath = row.tmp_path?.trim();
       if (!relayPath) throw new Error("원본 전송 경로가 없어요");
+      assertRelayOriginalPath(relayPath, session.user.id, row.id);
 
       if (row.status === "uploaded") {
         if (new Date(row.expires_at).getTime() <= Date.now()) {

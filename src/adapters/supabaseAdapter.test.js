@@ -781,6 +781,22 @@ describe("supabaseAdapter recipient save confirmation", () => {
     expect(client.spies.operations).toEqual([]);
   });
 
+  it("rejects a relay path owned by another transfer before mutation", async () => {
+    const client = makeFetchClient({
+      rows: {
+        transfer_queue: [transferRow({
+          tmp_path: "relay-originals/user-123/tr_other/gps.jpg",
+        })],
+      },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(
+      adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
+    ).rejects.toThrow("원본 전송 경로가 올바르지 않아요");
+    expect(client.spies.operations).toEqual([]);
+  });
+
   it("keeps the transfer uploaded when recipient-copy persistence fails", async () => {
     const client = makeFetchClient({
       rows: { transfer_queue: [transferRow()] },
