@@ -80,6 +80,16 @@ describe("RecipientTransfersScreen read states", () => {
     expect(screen.getByText("파트너가 새 사진을 올리면 여기에 나타나요.")).toBeInTheDocument();
   });
 
+  it("labels a transfer that expired while the screen remained open", async () => {
+    api.listIncomingTransfers.mockResolvedValue([
+      { ...transfer, expiresAt: "2026-08-06T00:59:59.000Z" },
+    ]);
+
+    render(<RecipientTransfersScreen nav={makeNav()} owner="nyong" />);
+
+    expect(await screen.findByText("만료됨")).toBeInTheDocument();
+  });
+
   it("retries a failed list load", async () => {
     api.listIncomingTransfers
       .mockImplementationOnce(() => {
@@ -149,8 +159,37 @@ describe("RecipientTransfersScreen actions", () => {
     ));
   });
 
+  it("maps Bara's phone confirmation to bara_phone", async () => {
+    const baraTransfer = {
+      ...transfer,
+      sourceOwner: "nyong",
+      destinationOwner: "bara",
+    };
+    api.listIncomingTransfers.mockResolvedValue([baraTransfer]);
+    api.createIncomingTransferDownload.mockResolvedValue(download);
+    api.confirmIncomingTransferSaved.mockResolvedValue({
+      transferId: transfer.id,
+      status: "deleted",
+      location: "bara_phone",
+    });
+    render(
+      <RecipientTransfersScreen nav={makeNav()} owner="bara" downloadFile={vi.fn()} />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "summer-river.jpg 다운로드" }));
+    fireEvent.click(await screen.findByRole("button", { name: "내 폰에 저장 완료" }));
+
+    await waitFor(() => expect(api.confirmIncomingTransferSaved).toHaveBeenCalledWith(
+      "tr_hash-123",
+      "bara",
+      "bara_phone",
+    ));
+  });
+
   it("keeps the transfer retryable when download or confirmation fails", async () => {
-    api.listIncomingTransfers.mockResolvedValue([transfer]);
+    api.listIncomingTransfers
+      .mockResolvedValueOnce([transfer])
+      .mockResolvedValueOnce([]);
     api.createIncomingTransferDownload
       .mockRejectedValueOnce(new Error("다운로드 URL을 만들지 못했어요"))
       .mockResolvedValue(download);
@@ -168,6 +207,10 @@ describe("RecipientTransfersScreen actions", () => {
     expect(await screen.findByText("저장 확인에 실패했어요")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "내 폰에 저장 완료" })).toBeEnabled();
     expect(screen.getByText("summer-river.jpg")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "목록 새로고침" }));
+    expect(await screen.findByText("기다리는 원본이 없어요")).toBeInTheDocument();
+    expect(api.listIncomingTransfers).toHaveBeenCalledTimes(2);
   });
 
   it("closes without confirming an unacknowledged download", async () => {
@@ -201,5 +244,18 @@ it("creates and removes a browser download anchor", () => {
   });
   expect(documentRef.body.appendChild).toHaveBeenCalledWith(anchor);
   expect(click).toHaveBeenCalledOnce();
+  expect(remove).toHaveBeenCalledOnce();
+});
+
+it("removes the browser download anchor when click throws", () => {
+  const error = new Error("브라우저 다운로드를 시작하지 못했어요");
+  const remove = vi.fn();
+  const anchor = { style: {}, click: vi.fn(() => { throw error; }), remove };
+  const documentRef = {
+    createElement: vi.fn(() => anchor),
+    body: { appendChild: vi.fn() },
+  };
+
+  expect(() => startBrowserDownload(download, documentRef)).toThrow(error);
   expect(remove).toHaveBeenCalledOnce();
 });

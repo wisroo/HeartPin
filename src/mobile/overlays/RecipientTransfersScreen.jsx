@@ -11,12 +11,17 @@ export function startBrowserDownload({ url, filename }, documentRef = document) 
   anchor.rel = "noopener";
   anchor.style.display = "none";
   documentRef.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
+  try {
+    anchor.click();
+  } finally {
+    anchor.remove();
+  }
 }
 
 function phoneLocationFor(owner) {
-  return owner === "bara" ? "bara_phone" : "nyong_phone";
+  if (owner === "bara") return "bara_phone";
+  if (owner === "nyong") return "nyong_phone";
+  throw new Error("저장 위치를 확인할 수 없어요.");
 }
 
 function formatSize(bytes) {
@@ -26,7 +31,10 @@ function formatSize(bytes) {
 }
 
 function remainingLabel(expiresAt) {
-  const hours = Math.max(1, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / HOUR_MS));
+  const remainingMs = new Date(expiresAt).getTime() - Date.now();
+  if (!Number.isFinite(remainingMs)) return "만료 정보 없음";
+  if (remainingMs <= 0) return "만료됨";
+  const hours = Math.max(1, Math.ceil(remainingMs / HOUR_MS));
   if (hours <= 24) return `${hours}시간 남음`;
   return `${Math.ceil(hours / 24)}일 남음`;
 }
@@ -87,6 +95,12 @@ export default function RecipientTransfersScreen({
 
   const setRowError = (id, message) => {
     setRowErrors((current) => ({ ...current, [id]: message }));
+  };
+
+  const reloadTransfers = () => {
+    setReadyIds([]);
+    setRowErrors({});
+    setReloadKey((key) => key + 1);
   };
 
   const startDownload = async (transfer) => {
@@ -182,7 +196,10 @@ export default function RecipientTransfersScreen({
                     </div>
 
                     {rowErrors[transfer.id] && (
-                      <p className="hpm-receive-error" role="alert">{rowErrors[transfer.id]}</p>
+                      <div className="hpm-receive-error" role="alert">
+                        <span>{rowErrors[transfer.id]}</span>
+                        <button type="button" onClick={reloadTransfers}>목록 새로고침</button>
+                      </div>
                     )}
 
                     {!isReady ? (
