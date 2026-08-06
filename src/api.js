@@ -43,6 +43,13 @@ export function createIncomingTransferDownload(transferId, owner) {
   return adapter.createIncomingTransferDownload(transferId, owner);
 }
 
+export function confirmIncomingTransferSaved(transferId, owner, location) {
+  if (API_MODE !== "supabase" || !adapter.confirmIncomingTransferSaved) {
+    throw new Error("Supabase 모드에서만 원본 전송 저장을 확인할 수 있어요.");
+  }
+  return adapter.confirmIncomingTransferSaved(transferId, owner, location);
+}
+
 export const opPlacePhotos = (rows) => adapter.placePhotos(rows);
 export const opAddTrip = (trip) => adapter.addTrip(trip);
 export const opEditTrip = (tripId, text) => adapter.editTrip(tripId, text);

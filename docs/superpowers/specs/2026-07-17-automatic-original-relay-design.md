@@ -1,11 +1,11 @@
 # Phase 3 Automatic Original Relay Design
 
 Date: 2026-07-17
-Status: Relay creation and recipient-download adapter implemented, awaiting user verification
+Status: Relay creation, recipient download, and save-confirmation adapters implemented; awaiting UI and user verification
 
 ## Goal
 
-When either `bara` or `nyong` records a photo, HeartPin permanently stores only the existing display and thumb derivatives, while also placing the original in private Supabase Storage for the other person to receive. The upload slice creates that temporary relay with a server-enforced seven-day expiry, and the recipient adapter lists eligible transfers and creates five-minute download URLs on demand. Web/Mobile download UI, successful recipient save, relay deletion, and scheduled expiry cleanup remain follow-up slices.
+When either `bara` or `nyong` records a photo, HeartPin permanently stores only the existing display and thumb derivatives, while also placing the original in private Supabase Storage for the other person to receive. The upload slice creates that temporary relay with a server-enforced seven-day expiry, the recipient adapter lists eligible transfers and creates five-minute download URLs on demand, and the save-confirmation adapter records an explicit recipient location before deleting the relay original. Web/Mobile download/confirmation UI and scheduled expiry cleanup remain follow-up slices.
 
 This moves the original-relay path ahead of the remaining Phase 1B external-drive and real-device validation work. Those deferred items remain valid but do not block this Phase 3 slice.
 
@@ -59,6 +59,7 @@ user_id            authenticated shared-account user
 content_hash
 source_owner       bara | nyong
 dest_owner         bara | nyong, must differ from source_owner
+landed_location    bara_phone | nyong_phone | personal_pc, null until confirmed
 tmp_path           private Storage object path
 original_name
 original_size
@@ -103,7 +104,7 @@ Progress remains item-based so existing screens continue to work. A photo reache
 
 ## Recipient and Cleanup Flow
 
-Steps 1-2 now have an adapter implementation; UI integration and steps 3-5 remain follow-up slices:
+Steps 1-4 now have adapter implementations; UI integration and the scheduled step 5 remain follow-up slices:
 
 1. List `uploaded` transfers whose `dest_owner` matches the active device identity.
 2. Create a short-lived signed URL only when the recipient initiates download.
@@ -137,6 +138,21 @@ The recipient adapter adds two narrow operations without changing either UI shel
 
 Out of scope for this slice: Web/Mobile download UI, browser or OS save confirmation, `photo_copies`, `landed`/`deleted` transitions, temporary-object deletion, scheduled expiry cleanup, and real-device validation. A generated URL proves only the adapter contract, not that a browser or phone saved the original successfully.
 
+## Implemented Recipient Save-Confirmation Adapter Slice
+
+The save-confirmation adapter adds one narrow operation without changing either UI shell:
+
+- `confirmIncomingTransferSaved(transferId, owner, location)` accepts explicit `bara_phone`, `nyong_phone`, or `personal_pc`; phone locations must match the active logical recipient;
+- a security-invoker PostgreSQL function locks the selected transfer row, validates its owner, expiry, status, and exact relay path, then upserts `photo_copies.present` and changes the transfer to `landed` in one transaction;
+- the first `landed` transition stores `landed_location`, and later `landed`/`deleted` retries must use that same location;
+- only a relay `tmp_path` matching `relay-originals/<auth user>/<transfer id>/<filename>` is removed, and a conditional `landed`/location update must affect a row before the adapter reports `deleted`;
+- `landed` retries repeat cleanup without writing another copy, `deleted` retries return idempotent success, and failures never falsely report deletion;
+- an exact recipient-copy unique index supports Supabase upsert on `(content_hash, location, owner)` while preserving the existing shared-owner index.
+
+Schema reruns stop with an explicit preflight error if older `landed` or `deleted` rows have no `landed_location`; their physical save destination must be verified and backfilled rather than inferred.
+
+Out of scope for this slice: Web/Mobile confirmation UI, proof of browser or operating-system save, live Supabase migration/RLS/Storage verification, scheduled expiry/failed-cleanup jobs, and physical-device validation.
+
 ## Verification
 
 Cloud-friendly verification:
@@ -147,7 +163,7 @@ npm run build
 git diff --check
 ```
 
-The adapter tests use mocked Supabase table and Storage clients. They prove that the original goes only to `relay-originals`, the transfer goes to the opposite identity, expiry is seven days, queue failure removes the inbox row and temporary object, recipient lists omit private paths, and rejected or expired downloads do not create signed URLs.
+The adapter tests use mocked Supabase table and Storage clients. They prove that the original goes only to `relay-originals`, the transfer goes to the opposite identity, expiry is seven days, queue failure removes the inbox row and temporary object, recipient lists omit private paths, rejected or expired downloads do not create signed URLs, and save confirmation marks `deleted` only after the validated relay object is removed.
 
 Local-only verification after later recipient slices:
 

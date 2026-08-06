@@ -6,6 +6,7 @@ const SIGNED_URL_SECONDS = 60 * 60;
 const RELAY_SIGNED_URL_SECONDS = 5 * 60;
 const RELAY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const EDITABLE_SPOT_FIELDS = new Set(["name", "time", "mood", "guide", "reaction"]);
+const RECIPIENT_SAVE_LOCATIONS = new Set(["bara_phone", "nyong_phone", "personal_pc"]);
 
 function emptyState() {
   return {
@@ -56,8 +57,36 @@ export function relayDestinationFor(owner) {
   throw new Error("사진 owner는 bara 또는 nyong이어야 해요");
 }
 
+export function recipientSaveLocationFor(owner, location) {
+  relayDestinationFor(owner);
+  if (!RECIPIENT_SAVE_LOCATIONS.has(location)) {
+    throw new Error("지원하지 않는 원본 저장 위치예요");
+  }
+  const expectedPhone = owner === "bara" ? "bara_phone" : "nyong_phone";
+  if (location !== "personal_pc" && location !== expectedPhone) {
+    throw new Error("원본 저장 위치가 수령자와 맞지 않아요");
+  }
+  return location;
+}
+
 export function buildRelayOriginalPath(userId, transferId, item) {
   return `relay-originals/${userId}/${transferId}/${safeBaseName(item.name || item.file?.name)}.${extensionFor(item)}`;
+}
+
+function assertRelayOriginalPath(path, userId, transferId) {
+  if (typeof path !== "string" || path !== path.trim()) {
+    throw new Error("원본 전송 경로가 올바르지 않아요");
+  }
+  const parts = path.split("/");
+  if (
+    parts.length !== 4
+    || parts[0] !== "relay-originals"
+    || parts[1] !== userId
+    || parts[2] !== transferId
+    || !parts[3]
+  ) {
+    throw new Error("원본 전송 경로가 올바르지 않아요");
+  }
 }
 
 function normalizeUploadItem(item) {
@@ -517,6 +546,49 @@ export function createSupabaseAdapter({ client = createSupabaseClient(), prepare
       };
     },
 
+    async confirmIncomingTransferSaved(transferId, owner, location) {
+      const confirmedLocation = recipientSaveLocationFor(owner, location);
+      const sessionResult = await client.auth.getSession();
+      const session = assertSupabaseOk(sessionResult, "Supabase 세션 확인 실패")?.session;
+      if (!session?.user) throw new Error("Supabase 로그인이 필요해요");
+      const row = assertSupabaseOk(
+        await client.rpc("confirm_incoming_transfer_landed", {
+          p_transfer_id: transferId,
+          p_owner: owner,
+          p_location: confirmedLocation,
+        }),
+        "Supabase 원본 저장 확인 실패",
+      );
+      if (!row) throw new Error("원본 저장 확인 결과가 없어요");
+      if (row.status === "deleted") {
+        return { transferId: row.id, status: "deleted", location: confirmedLocation };
+      }
+      if (row.status !== "landed" || row.landed_location !== confirmedLocation) {
+        throw new Error("원본 저장 확인 결과가 올바르지 않아요");
+      }
+
+      const relayPath = row.tmp_path;
+      if (!relayPath) throw new Error("원본 전송 경로가 없어요");
+      assertRelayOriginalPath(relayPath, session.user.id, row.id);
+
+      assertSupabaseOk(
+        await client.storage.from(PHOTOS_BUCKET).remove([relayPath]),
+        "Supabase 임시 원본 삭제 실패",
+      );
+      const deleted = assertSupabaseOk(
+        await client.from("transfer_queue")
+          .update({ status: "deleted" })
+          .eq("id", row.id)
+          .eq("status", "landed")
+          .eq("landed_location", confirmedLocation)
+          .select("id")
+          .maybeSingle(),
+        "Supabase 원본 전송 삭제 기록 실패",
+      );
+      if (!deleted) throw new Error("원본 전송 삭제 상태가 변경되지 않았어요");
+      return { transferId: row.id, status: "deleted", location: confirmedLocation };
+    },
+
     async uploadPhotos(items, owner, onProgress) {
       const sessionResult = await client.auth.getSession();
       const session = assertSupabaseOk(sessionResult, "Supabase 세션 확인 실패")?.session;
@@ -825,6 +897,7 @@ export const supabaseAdapter = {
   fetchState: (...args) => getDefaultAdapter().fetchState(...args),
   listIncomingTransfers: (...args) => getDefaultAdapter().listIncomingTransfers(...args),
   createIncomingTransferDownload: (...args) => getDefaultAdapter().createIncomingTransferDownload(...args),
+  confirmIncomingTransferSaved: (...args) => getDefaultAdapter().confirmIncomingTransferSaved(...args),
   uploadPhotos: (...args) => getDefaultAdapter().uploadPhotos(...args),
   placePhotos: (...args) => getDefaultAdapter().placePhotos(...args),
   addTrip: (...args) => getDefaultAdapter().addTrip(...args),

@@ -105,6 +105,9 @@ create table if not exists public.photo_copies (
 create unique index if not exists photo_copies_unique_location
 on public.photo_copies (content_hash, location, coalesce(owner, 'shared'));
 
+create unique index if not exists photo_copies_unique_owner_location
+on public.photo_copies (content_hash, location, owner);
+
 create table if not exists public.transfer_queue (
   id text primary key default gen_random_uuid()::text,
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -113,6 +116,9 @@ create table if not exists public.transfer_queue (
     constraint transfer_queue_source_owner_check check (source_owner in ('bara', 'nyong')),
   dest_owner text not null
     constraint transfer_queue_dest_owner_check check (dest_owner in ('bara', 'nyong')),
+  landed_location text
+    constraint transfer_queue_landed_location_check
+    check (landed_location is null or landed_location in ('bara_phone', 'nyong_phone', 'personal_pc')),
   tmp_path text,
   original_name text not null,
   original_size bigint,
@@ -123,6 +129,18 @@ create table if not exists public.transfer_queue (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint transfer_queue_distinct_owners check (source_owner <> dest_owner),
+  constraint transfer_queue_landed_state_check
+    check (
+      (status in ('landed', 'deleted') and landed_location is not null)
+      or (status not in ('landed', 'deleted'))
+    ),
+  constraint transfer_queue_landed_owner_check
+    check (
+      landed_location is null
+      or landed_location = 'personal_pc'
+      or (dest_owner = 'bara' and landed_location = 'bara_phone')
+      or (dest_owner = 'nyong' and landed_location = 'nyong_phone')
+    ),
   constraint transfer_queue_uploaded_path_check
     check (status <> 'uploaded' or nullif(btrim(tmp_path), '') is not null)
 );
@@ -186,10 +204,24 @@ $$;
 alter table public.transfer_queue add column if not exists user_id uuid;
 alter table public.transfer_queue add column if not exists source_owner text;
 alter table public.transfer_queue add column if not exists dest_owner text;
+alter table public.transfer_queue add column if not exists landed_location text;
 alter table public.transfer_queue add column if not exists original_name text;
 alter table public.transfer_queue add column if not exists original_size bigint;
 alter table public.transfer_queue add column if not exists mime_type text;
 alter table public.transfer_queue add column if not exists expires_at timestamptz;
+
+do $$
+begin
+  if exists (
+    select 1
+    from public.transfer_queue
+    where status in ('landed', 'deleted')
+      and landed_location is null
+  ) then
+    raise exception 'legacy landed or deleted transfer_queue rows require landed_location before rerunning';
+  end if;
+end;
+$$;
 
 do $$
 begin
@@ -255,6 +287,25 @@ alter table public.transfer_queue add constraint transfer_queue_source_owner_che
 alter table public.transfer_queue drop constraint if exists transfer_queue_dest_owner_check;
 alter table public.transfer_queue add constraint transfer_queue_dest_owner_check
   check (dest_owner in ('bara', 'nyong'));
+alter table public.transfer_queue drop constraint if exists transfer_queue_landed_location_check;
+alter table public.transfer_queue add constraint transfer_queue_landed_location_check
+  check (landed_location is null or landed_location in ('bara_phone', 'nyong_phone', 'personal_pc'));
+alter table public.transfer_queue drop constraint if exists transfer_queue_landed_state_check;
+alter table public.transfer_queue add
+  constraint transfer_queue_landed_state_check
+  check (
+    (status in ('landed', 'deleted') and landed_location is not null)
+    or (status not in ('landed', 'deleted'))
+  );
+alter table public.transfer_queue drop constraint if exists transfer_queue_landed_owner_check;
+alter table public.transfer_queue add
+  constraint transfer_queue_landed_owner_check
+  check (
+    landed_location is null
+    or landed_location = 'personal_pc'
+    or (dest_owner = 'bara' and landed_location = 'bara_phone')
+    or (dest_owner = 'nyong' and landed_location = 'nyong_phone')
+  );
 alter table public.transfer_queue drop constraint if exists transfer_queue_distinct_owners;
 alter table public.transfer_queue add constraint transfer_queue_distinct_owners
   check (source_owner <> dest_owner);
@@ -330,6 +381,120 @@ begin
   return new;
 end;
 $$;
+
+create or replace function public.confirm_incoming_transfer_landed(
+  p_transfer_id text,
+  p_owner text,
+  p_location text
+) returns jsonb
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  transfer_row public.transfer_queue%rowtype;
+  account_id uuid := auth.uid();
+  relay_path text;
+  path_parts text[];
+begin
+  if account_id is null then
+    raise exception 'authentication required';
+  end if;
+
+  if p_owner is null or p_owner not in ('bara', 'nyong') then
+    raise exception 'unsupported recipient owner';
+  end if;
+
+  if p_location is null or p_location not in ('bara_phone', 'nyong_phone', 'personal_pc') then
+    raise exception 'unsupported recipient landing location';
+  end if;
+
+  if p_location <> 'personal_pc' and p_location <> (p_owner || '_phone') then
+    raise exception 'recipient phone location must match owner';
+  end if;
+
+  select *
+  into transfer_row
+  from public.transfer_queue
+  where id = p_transfer_id
+    and user_id = (select auth.uid())
+    and dest_owner = p_owner
+  for update;
+
+  if not found then
+    raise exception 'incoming transfer not found';
+  end if;
+
+  if transfer_row.status not in ('uploaded', 'landed', 'deleted') then
+    raise exception 'incoming transfer cannot be confirmed from status %', transfer_row.status;
+  end if;
+
+  if transfer_row.status in ('landed', 'deleted') then
+    if transfer_row.landed_location is distinct from p_location then
+      raise exception 'incoming transfer was confirmed at a different location';
+    end if;
+
+    return jsonb_build_object(
+      'id', transfer_row.id,
+      'status', transfer_row.status,
+      'landed_location', transfer_row.landed_location,
+      'tmp_path', transfer_row.tmp_path
+    );
+  end if;
+
+  if transfer_row.expires_at <= now() then
+    raise exception 'incoming transfer expired';
+  end if;
+
+  relay_path := transfer_row.tmp_path;
+  path_parts := string_to_array(relay_path, '/');
+
+  if relay_path is null
+    or relay_path <> btrim(relay_path)
+    or array_length(path_parts, 1) <> 4
+    or path_parts[1] <> 'relay-originals'
+    or path_parts[2] <> account_id::text
+    or path_parts[3] <> transfer_row.id
+    or nullif(path_parts[4], '') is null
+  then
+    raise exception 'incoming transfer has an invalid relay original path';
+  end if;
+
+  insert into public.photo_copies (
+    content_hash,
+    owner,
+    location,
+    status,
+    path,
+    checked_at
+  ) values (
+    transfer_row.content_hash,
+    p_owner,
+    p_location,
+    'present',
+    null,
+    now()
+  )
+  on conflict (content_hash, location, owner) do update
+  set status = excluded.status,
+      path = excluded.path,
+      checked_at = excluded.checked_at;
+
+  update public.transfer_queue
+  set status = 'landed', landed_location = p_location
+  where id = transfer_row.id;
+
+  return jsonb_build_object(
+    'id', transfer_row.id,
+    'status', 'landed',
+    'landed_location', p_location,
+    'tmp_path', transfer_row.tmp_path
+  );
+end;
+$$;
+
+revoke all on function public.confirm_incoming_transfer_landed(text, text, text) from public;
+grant execute on function public.confirm_incoming_transfer_landed(text, text, text) to authenticated;
 
 drop trigger if exists touch_trips_updated_at on public.trips;
 create trigger touch_trips_updated_at before update on public.trips
