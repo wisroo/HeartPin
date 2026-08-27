@@ -2,10 +2,11 @@
  * MobileUploadFlow의 실제 로직(addFiles/start/advance/commitName/nearestSpot/finish)을
  * 그대로 포팅하고, hpm-* 마크업으로 재스킨.  런치/완료 화면은 제거: 끝나면 toast + close.
  * pick → reading(진행률) → confirm(한 장씩) */
-import { Fragment, useState, useRef } from "react";
+import { Fragment, useState } from "react";
 import { HP_DATA, suggest, autoLine, hav } from "../../data.js";
 import { buildTripFromGroups } from "../../buildTrip.js";
 import * as api from "../../api.js";
+import { pickPhotos } from "../../platform/media/mediaPicker.js";
 import { Photo, Avatar, Ico } from "../ui/MobileAtoms.jsx";
 
 // 근접 매칭: 세션 스팟 + 기록의 모든 스팟 중 300m 이내 최단 (MobileUploadFlow에서 그대로)
@@ -28,7 +29,7 @@ export default function UploadSheet({ app, nav, settings }) {
   const owner = settings.myChar || "bara";
   const [screen, setScreen] = useState("pick"); // pick | reading | confirm
   const [src, setSrc] = useState("roll");
-  const [files, setFiles] = useState([]); // {id, file, url}
+  const [files, setFiles] = useState([]); // {id, item, file, url}
   const [sel, setSel] = useState(() => new Set());
   const [prog, setProg] = useState(0);
   const [errMsg, setErrMsg] = useState(null);
@@ -42,17 +43,31 @@ export default function UploadSheet({ app, nav, settings }) {
   const [dupCount, setDupCount] = useState(0);
   const [saving, setSaving] = useState(false);
 
-  const rollRef = useRef(null), camRef = useRef(null);
-
-  const addFiles = (fileList) => {
-    const imgs = [...fileList].filter((f) => f.type.indexOf("image/") === 0 || /\.(heic|heif)$/i.test(f.name));
+  const addFiles = (items) => {
+    const imgs = items.filter((item) => item.mimeType.indexOf("image/") === 0 || /\.(heic|heif)$/i.test(item.name));
     setFiles((prev) => {
-      const seen = new Set(prev.map((p) => p.file.name + "|" + p.file.size));
-      const fresh = imgs.filter((f) => !seen.has(f.name + "|" + f.size))
-        .map((f, i) => ({ id: "f" + Date.now() + "_" + i, file: f, url: URL.createObjectURL(f) }));
+      const seen = new Set(prev.map((p) => p.item.name + "|" + p.item.size));
+      const fresh = imgs.filter((item) => !seen.has(item.name + "|" + item.size))
+        .map((item, i) => ({
+          id: "f" + Date.now() + "_" + (prev.length + i),
+          item,
+          file: item.file,
+          url: URL.createObjectURL(item.file),
+        }));
       setSel((s) => { const n = new Set(s); fresh.forEach((x) => n.add(x.id)); return n; });
       return prev.concat(fresh);
     });
+  };
+  const openPicker = async (source) => {
+    setSrc(source === "library" ? "roll" : "cam");
+    setErrMsg(null);
+    try {
+      const items = await pickPhotos({ source, multiple: source === "library" });
+      if (!items.length) return;
+      addFiles(items);
+    } catch (error) {
+      setErrMsg(error.message);
+    }
   };
   const toggle = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
@@ -62,7 +77,7 @@ export default function UploadSheet({ app, nav, settings }) {
     if (!chosen.length) return;
     setScreen("reading"); setProg(0); setErrMsg(null);
     try {
-      const result = await api.uploadPhotos(chosen.map((c) => c.file), owner, setProg);
+      const result = await api.uploadPhotos(chosen.map((c) => c.item), owner, setProg);
       app.apply(result.state);
       setDupCount(result.duplicates.length);
       setQueue(result.added); setIdx(0); setDec({}); setSessionSpots([]);
@@ -176,11 +191,9 @@ export default function UploadSheet({ app, nav, settings }) {
               <div className="hpm-bubble"><p>여행 중 찍은 거 그냥 다 골라줘! 정리는 내가 할게 🐻✨</p></div>
             </div>
             <div className="hpm-src">
-              <button className={src === "roll" ? "on" : ""} onClick={() => { setSrc("roll"); rollRef.current?.click(); }}><span className="ic"><Ico.image width="24" height="24" /></span><span className="lb">카메라롤</span></button>
-              <button className={src === "cam" ? "on" : ""} onClick={() => { setSrc("cam"); camRef.current?.click(); }}><span className="ic"><Ico.cam width="24" height="24" /></span><span className="lb">바로 찍기</span></button>
+              <button className={src === "roll" ? "on" : ""} onClick={() => openPicker("library")}><span className="ic"><Ico.image width="24" height="24" /></span><span className="lb">카메라롤</span></button>
+              <button className={src === "cam" ? "on" : ""} onClick={() => openPicker("camera")}><span className="ic"><Ico.cam width="24" height="24" /></span><span className="lb">바로 찍기</span></button>
             </div>
-            <input ref={rollRef} type="file" accept="image/*,.heic,.heif" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
-            <input ref={camRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
             {errMsg && <p className="hpm-err" style={{ color: "var(--sd)", fontSize: 13, margin: "8px 0" }}>⚠️ {errMsg}</p>}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={{ fontFamily: "var(--fd)", fontSize: 15, color: "var(--ink)" }}>{files.length ? "고른 사진" : "최근 사진"}</span>
