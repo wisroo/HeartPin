@@ -101,7 +101,7 @@ The latest `supabase/schema.sql` is reapplied through the authenticated Supabase
 
 Android keeps the existing app id `com.heartpin.app`, `minSdkVersion = 23`, target SDK 35, and registered `HeartPinMedia` plugin. `android/local.properties` remains ignored and supplies this Mac's SDK path.
 
-iOS keeps bundle id `com.heartpin.app` and deployment target 14.0. `Info.plist` adds plain-language descriptions for reading the photo library, using the camera, and adding a saved photo. The Apple Development Team remains a local Xcode signing choice and is not committed as a shared project secret.
+iOS keeps bundle id `com.heartpin.app` and deployment target 14.0. `Info.plist` adds plain-language descriptions for reading the photo library and using the camera. A photo-library add description is deferred until native recipient save enters scope. The Apple Development Team remains a local Xcode signing choice and is not committed as a shared project secret.
 
 The current Mac must install the iOS platform matching Xcode 26.6 and resolve its CoreSimulator version mismatch before command-line or Xcode device builds can be considered verified.
 
