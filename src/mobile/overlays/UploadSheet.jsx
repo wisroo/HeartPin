@@ -70,6 +70,10 @@ export default function UploadSheet({ app, nav, settings }) {
     }
   };
   const toggle = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const closeSheet = () => {
+    files.forEach((file) => URL.revokeObjectURL(file.url));
+    nav.close();
+  };
 
   // ── 업로드 시작: 서버가 EXIF·해시·압축 처리 ──
   const start = async () => {
@@ -131,7 +135,7 @@ export default function UploadSheet({ app, nav, settings }) {
   // ── 끝맺음: 완료 화면 대신 toast + close ──
   const endUpload = (keptN) => {
     nav.toast(keptN ? `${keptN}장 정리에 담았어요` : "올릴 새 사진이 없었어요");
-    nav.close();
+    closeSheet();
   };
 
   // ── 완료: 결정을 ops로 변환 (기존 여정 배치 / 새 여행 조립 / 버리기) ──
@@ -174,16 +178,12 @@ export default function UploadSheet({ app, nav, settings }) {
 
   // ════════ PICK ════════
   if (screen === "pick") {
-    const closePick = () => {
-      files.forEach((f) => URL.revokeObjectURL(f.url));
-      nav.close();
-    };
     return (
-      <div className="hpm-overlay" onClick={(e) => { if (e.target === e.currentTarget) closePick(); }}>
+      <div className="hpm-overlay" onClick={(e) => { if (e.target === e.currentTarget) closeSheet(); }}>
         <div className="hpm-sheet-modal">
           <div className="hpm-up-head">
             <div className="ttl">사진 올리기</div>
-            <button className="ic" onClick={closePick} style={{ width: 34, height: 34, border: "1.5px solid var(--line2)", borderRadius: 11, color: "var(--ink2)" }}>✕</button>
+            <button className="ic" onClick={closeSheet} style={{ width: 34, height: 34, border: "1.5px solid var(--line2)", borderRadius: 11, color: "var(--ink2)" }}>✕</button>
           </div>
           <div className="hpm-up-body" style={{ maxHeight: "70vh" }}>
             <div className="hpm-speech bara" style={{ marginBottom: 14 }}>

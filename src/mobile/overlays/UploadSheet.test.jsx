@@ -164,6 +164,23 @@ test("uploading passes the selected normalized items and bara owner", async () =
   expect(onProgress).toEqual(expect.any(Function));
 });
 
+test("a successful zero-added upload revokes every preview before closing", async () => {
+  pickPhotos.mockResolvedValueOnce([
+    makeItem("photo-one.jpg"),
+    makeItem("photo-two.jpg"),
+  ]);
+  const { nav } = renderSheet();
+
+  fireEvent.click(screen.getByRole("button", { name: "카메라롤" }));
+  await screen.findByText("2장 선택");
+  fireEvent.click(screen.getByRole("button", { name: /2장 올리고 정리하기/ }));
+
+  await waitFor(() => expect(nav.close).toHaveBeenCalledTimes(1));
+  expect(URL.revokeObjectURL).toHaveBeenCalledTimes(2);
+  expect(URL.revokeObjectURL).toHaveBeenNthCalledWith(1, "blob:photo-one.jpg");
+  expect(URL.revokeObjectURL).toHaveBeenNthCalledWith(2, "blob:photo-two.jpg");
+});
+
 test("closing the sheet revokes every created preview URL", async () => {
   pickPhotos.mockResolvedValueOnce([
     makeItem("photo-one.jpg"),
