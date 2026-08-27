@@ -43,6 +43,27 @@ describe("pickPhotos", () => {
     expect(pickWebPhotos).not.toHaveBeenCalled();
   });
 
+  it("routes web library selection to the web picker", async () => {
+    Capacitor.isNativePlatform.mockReturnValue(false);
+    pickWebPhotos.mockResolvedValue(["web"]);
+
+    await expect(pickPhotos({ source: "library", multiple: true })).resolves.toEqual(["web"]);
+    expect(pickWebPhotos).toHaveBeenCalledWith({ source: "library", multiple: true });
+    expect(pickAndroidOriginalPhotos).not.toHaveBeenCalled();
+    expect(pickCapacitorPhotos).not.toHaveBeenCalled();
+  });
+
+  it("routes native Android camera selection to the Capacitor picker", async () => {
+    Capacitor.isNativePlatform.mockReturnValue(true);
+    Capacitor.getPlatform.mockReturnValue("android");
+    pickCapacitorPhotos.mockResolvedValue(["native-camera"]);
+
+    await expect(pickPhotos({ source: "camera", multiple: false })).resolves.toEqual(["native-camera"]);
+    expect(pickCapacitorPhotos).toHaveBeenCalledWith({ source: "camera", multiple: false });
+    expect(pickAndroidOriginalPhotos).not.toHaveBeenCalled();
+    expect(pickWebPhotos).not.toHaveBeenCalled();
+  });
+
   it("uses the Capacitor picker on other native platforms", async () => {
     Capacitor.isNativePlatform.mockReturnValue(true);
     Capacitor.getPlatform.mockReturnValue("ios");

@@ -35,6 +35,7 @@ export function pickWebPhotos({ source = "library", multiple = true } = {}) {
         reject(error);
       }
     };
+    input.oncancel = () => resolve([]);
     input.click();
   });
 }
