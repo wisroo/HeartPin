@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 
@@ -36,11 +37,22 @@ const makeItem = (name, source = "library") => {
   };
 };
 
+const deferred = () => {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+};
+
 const renderSheet = (props = {}) => {
   const app = props.app || mkApp();
   const nav = props.nav || { close: vi.fn(), toast: vi.fn() };
-  render(<UploadSheet app={app} nav={nav} settings={{ myChar: "bara" }} />);
-  return { app, nav };
+  const sheet = <UploadSheet app={app} nav={nav} settings={{ myChar: "bara" }} />;
+  const result = render(props.strict ? <StrictMode>{sheet}</StrictMode> : sheet);
+  return { app, nav, ...result };
 };
 
 beforeEach(() => {
@@ -83,6 +95,49 @@ test("opens the camera picker in single-photo mode", async () => {
   });
 });
 
+test("serializes competing picker taps and releases the guard after cancellation", async () => {
+  const selection = deferred();
+  pickPhotos.mockReturnValueOnce(selection.promise);
+  renderSheet();
+
+  const libraryButton = screen.getByRole("button", { name: "카메라롤" });
+  const cameraButton = screen.getByRole("button", { name: "바로 찍기" });
+  fireEvent.click(libraryButton);
+  fireEvent.click(cameraButton);
+
+  expect(pickPhotos).toHaveBeenCalledTimes(1);
+  expect(pickPhotos).toHaveBeenCalledWith({ source: "library", multiple: true });
+  expect(libraryButton).toBeDisabled();
+  expect(cameraButton).toBeDisabled();
+
+  selection.resolve([]);
+  await waitFor(() => expect(libraryButton).not.toBeDisabled());
+  expect(cameraButton).not.toBeDisabled();
+
+  fireEvent.click(cameraButton);
+  await waitFor(() => expect(pickPhotos).toHaveBeenCalledTimes(2));
+  expect(pickPhotos).toHaveBeenLastCalledWith({ source: "camera", multiple: false });
+});
+
+test("releases the picker guard after rejection and a successful retry clears the error", async () => {
+  const retryItem = makeItem("retry.jpg", "camera");
+  pickPhotos
+    .mockRejectedValueOnce(new Error("사진 접근 권한이 필요해요"))
+    .mockResolvedValueOnce([retryItem]);
+  renderSheet();
+
+  fireEvent.click(screen.getByRole("button", { name: "카메라롤" }));
+  expect(await screen.findByText(/사진 접근 권한이 필요해요/)).toHaveClass("hpm-err");
+  expect(screen.getByRole("button", { name: "카메라롤" })).not.toBeDisabled();
+  expect(screen.getByRole("button", { name: "바로 찍기" })).not.toBeDisabled();
+
+  fireEvent.click(screen.getByRole("button", { name: "바로 찍기" }));
+
+  await screen.findByText("1장 선택");
+  expect(document.querySelector(".hpm-err")).not.toBeInTheDocument();
+  expect(pickPhotos).toHaveBeenCalledTimes(2);
+});
+
 test("a picked photo creates a selected preview and enables upload", async () => {
   const item = makeItem("photo-one.jpg");
   pickPhotos.mockResolvedValueOnce([item]);
@@ -95,6 +150,18 @@ test("a picked photo creates a selected preview and enables upload", async () =>
   await waitFor(() => expect(screen.getByText("1장 선택")).toBeInTheDocument());
   expect(URL.createObjectURL).toHaveBeenCalledWith(item.file);
   expect(cta).not.toBeDisabled();
+});
+
+test("creates one preview URL when React StrictMode checks state updates", async () => {
+  const item = makeItem("strict-mode.jpg");
+  pickPhotos.mockResolvedValueOnce([item]);
+  renderSheet({ strict: true });
+
+  fireEvent.click(screen.getByRole("button", { name: "카메라롤" }));
+
+  await screen.findByText("1장 선택");
+  expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+  expect(URL.createObjectURL).toHaveBeenCalledWith(item.file);
 });
 
 test("reopening the picker accumulates another photo", async () => {
@@ -196,4 +263,30 @@ test("closing the sheet revokes every created preview URL", async () => {
   expect(URL.revokeObjectURL).toHaveBeenNthCalledWith(1, "blob:photo-one.jpg");
   expect(URL.revokeObjectURL).toHaveBeenNthCalledWith(2, "blob:photo-two.jpg");
   expect(nav.close).toHaveBeenCalledTimes(1);
+});
+
+test("external unmount revokes each created preview exactly once", async () => {
+  pickPhotos.mockResolvedValueOnce([makeItem("photo-one.jpg")]);
+  const { unmount } = renderSheet();
+
+  fireEvent.click(screen.getByRole("button", { name: "카메라롤" }));
+  await screen.findByText("1장 선택");
+  unmount();
+
+  expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
+  expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:photo-one.jpg");
+});
+
+test("a picker resolving after unmount creates no preview or state update", async () => {
+  const selection = deferred();
+  pickPhotos.mockReturnValueOnce(selection.promise);
+  const { unmount } = renderSheet();
+
+  fireEvent.click(screen.getByRole("button", { name: "카메라롤" }));
+  unmount();
+  selection.resolve([makeItem("late-photo.jpg")]);
+
+  await selection.promise;
+  expect(URL.createObjectURL).not.toHaveBeenCalled();
+  expect(URL.revokeObjectURL).not.toHaveBeenCalled();
 });
