@@ -3,6 +3,10 @@ export function apiUrl(path) {
   return `${base}${path}`;
 }
 
+export function localUploadFile(item) {
+  return item?.file || item;
+}
+
 async function json(res) {
   if (!res.ok) throw new Error(`API ${res.status}: ${await res.text().catch(() => "")}`);
   return res.json();
@@ -26,7 +30,8 @@ export const localAdapter = {
   uploadPhotos(files, owner, onProgress) {
     const fd = new FormData();
     const lm = [];
-    [...files].forEach((f) => {
+    [...files].forEach((item) => {
+      const f = localUploadFile(item);
       fd.append("photos", f, f.name);
       lm.push(f.lastModified || null);
     });
