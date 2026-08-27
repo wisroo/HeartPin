@@ -84,12 +84,20 @@ iPhone 실기기 검증 전 준비:
 
 이 표는 과거 spike 결과를 보존한다. Galaxy의 GPS 보존 결과는 이전 진단에서의 결과이며, 현재 feature 브랜치가 Galaxy에 sync·설치·재검증됐다는 뜻은 아니다. iOS 결과는 아직 없다.
 
-| Platform | Path | Format | takenAt | lat/lng | Result |
-| --- | --- | --- | --- | --- | --- |
-| Galaxy | Mobile browser file input | JPEG | Not tested yet | Not tested yet | Pending real-device test |
-| Galaxy | Android original media picker | JPEG | Preserved | Preserved | Historical Supabase spike result; this feature branch still needs sync, install, and device verification |
-| iPhone | Capacitor native picker | HEIC | Not tested yet | Not tested yet | Blocked by current local iOS toolchain diagnosis and pending signing/dev install |
-| iPhone | Capacitor native picker | JPEG | Not tested yet | Not tested yet | Blocked by current local iOS toolchain diagnosis and pending signing/dev install |
+| Platform / path | Format | Observed MIME type | Byte-size class | Capture time preserved | GPS preserved | Display derivative | Thumb derivative | Relay row + object | Organization | Other-device visibility | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Galaxy / Mobile browser file input | JPEG | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending real-device test |
+| Galaxy / Android original media picker | JPEG | Pending recheck | Pending recheck | Historical pass; pending recheck | Historical pass; pending recheck | Pending recheck | Pending recheck | Pending recheck | Pending recheck | Pending recheck | Historical metadata-only Supabase spike result; this feature branch still needs sync, install, and end-to-end device verification |
+| iPhone / Capacitor native picker | HEIC | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Blocked by current local iOS toolchain diagnosis and pending signing/dev install |
+| iPhone / Capacitor native picker | JPEG | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Blocked by current local iOS toolchain diagnosis and pending signing/dev install |
+
+실기기 확인 후 각 format 행의 모든 필드를 개별적으로 갱신한다.
+
+- MIME type은 picker가 반환한 관찰값만 기록한다.
+- Byte-size class는 `small (<5 MB)`, `medium (5–15 MB)`, `large (>15–25 MB)` 중 하나로만 기록하고 정확한 byte 수는 남기지 않는다.
+- Capture time과 GPS는 각각 `Preserved`, `Not preserved`, `Not present before test` 중 하나로 기록한다.
+- Display derivative, Thumb derivative, relay row/object, organization, other-device visibility는 서로 독립적으로 `Pass` 또는 redacted failure로 기록한다. Metadata 보존 성공으로 derivative나 relay 성공을 대신하지 않는다.
+- 파일명, 좌표, Storage object name, signed URL, 계정 정보, device identifier는 기록하지 않는다.
 
 ## Real application verification procedure
 
