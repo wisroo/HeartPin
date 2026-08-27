@@ -1,11 +1,11 @@
 # Phase 3 Automatic Original Relay Design
 
 Date: 2026-07-17
-Status: Relay creation, recipient download, and save-confirmation adapters implemented; awaiting UI and user verification
+Status: Relay adapters and Mobile/PWA recipient UI implemented; awaiting Web and Local-only verification
 
 ## Goal
 
-When either `bara` or `nyong` records a photo, HeartPin permanently stores only the existing display and thumb derivatives, while also placing the original in private Supabase Storage for the other person to receive. The upload slice creates that temporary relay with a server-enforced seven-day expiry, the recipient adapter lists eligible transfers and creates five-minute download URLs on demand, and the save-confirmation adapter records an explicit recipient location before deleting the relay original. Web/Mobile download/confirmation UI and scheduled expiry cleanup remain follow-up slices.
+When either `bara` or `nyong` records a photo, HeartPin permanently stores only the existing display and thumb derivatives, while also placing the original in private Supabase Storage for the other person to receive. The upload slice creates that temporary relay with a server-enforced seven-day expiry, the recipient adapter lists eligible transfers and creates five-minute download URLs on demand, and the save-confirmation adapter records an explicit recipient location before deleting the relay original. Mobile/PWA now exposes that flow through Profile → `받을 원본`; Web UI and scheduled expiry cleanup remain follow-up slices.
 
 This moves the original-relay path ahead of the remaining Phase 1B external-drive and real-device validation work. Those deferred items remain valid but do not block this Phase 3 slice.
 
@@ -45,7 +45,7 @@ The existing shell boundaries remain unchanged.
 - `src/adapters/supabaseUploadPrep.js` continues to produce the content hash, original bytes metadata, and display/thumb derivatives.
 - `src/api.js` remains the shell-facing adapter seam.
 - Web and Mobile upload shells continue to call `api.uploadPhotos`; they do not construct Storage paths or transfer rows.
-- Recipient download and confirmation will be exposed later as narrow adapter methods instead of direct Supabase calls from UI components.
+- Recipient download and confirmation are exposed as narrow adapter methods; the Mobile/PWA UI calls them only through `src/api.js` instead of calling Supabase directly.
 
 No new dependency or server component is required for the first implementation slice.
 
@@ -104,7 +104,7 @@ Progress remains item-based so existing screens continue to work. A photo reache
 
 ## Recipient and Cleanup Flow
 
-Steps 1-4 now have adapter implementations; UI integration and the scheduled step 5 remain follow-up slices:
+Steps 1-4 now have adapter implementations and Mobile/PWA integration; Web UI and the scheduled step 5 remain follow-up slices:
 
 1. List `uploaded` transfers whose `dest_owner` matches the active device identity.
 2. Create a short-lived signed URL only when the recipient initiates download.
@@ -152,6 +152,18 @@ The save-confirmation adapter adds one narrow operation without changing either 
 Schema reruns stop with an explicit preflight error if older `landed` or `deleted` rows have no `landed_location`; their physical save destination must be verified and backfilled rather than inferred.
 
 Out of scope for this slice: Web/Mobile confirmation UI, proof of browser or operating-system save, live Supabase migration/RLS/Storage verification, scheduled expiry/failed-cleanup jobs, and physical-device validation.
+
+## Implemented Mobile/PWA Recipient UI Slice
+
+The Mobile/PWA shell now connects the existing recipient APIs without changing their contracts:
+
+- Profile → `받을 원본` opens a dedicated full-screen overlay for `settings.myChar`;
+- list-shaped loading, populated, empty, load-error, download-error, and confirmation-error states keep retries in context;
+- `다운로드` requests a fresh signed URL and initiates a browser download with the original filename;
+- phone and personal-PC confirmation choices appear only after download initiation and map to the existing explicit locations;
+- successful API confirmation removes only that transfer and shows the existing Mobile toast; closing never confirms.
+
+The browser click is intentionally not treated as proof that the file persists on the device. Web UI, actual browser/OS save verification, live Supabase behavior, Capacitor camera-roll save, scheduled cleanup, and physical-device checks remain outstanding.
 
 ## Verification
 

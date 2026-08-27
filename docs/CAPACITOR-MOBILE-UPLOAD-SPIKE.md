@@ -1,12 +1,12 @@
 # Capacitor Mobile Upload Spike Results
 
-작성일: 2026-06-24
+작성일: 2026-06-24 · workflow 갱신: 2026-08-27
 
 ## 목적
 
 Android 모바일 브라우저 사진 선택 경로에서 GPS EXIF가 `null`로 들어오는 문제를 우회할 수 있는지 확인한다.
 
-검증 대상은 Capacitor dev app의 native photo picker다. Store 배포가 아니라 Galaxy debug install, iPhone Xcode dev install 기준으로 확인한다.
+검증 대상은 Capacitor dev app의 native photo picker다. Store 배포가 아니라 Galaxy debug install, iPhone Xcode dev install 기준으로 확인한다. 실제 검증은 레거시 임시 업로드가 아니라 HeartPin의 Supabase 앱 경로 전체를 확인한다.
 
 ## 현재 구현 상태
 
@@ -15,18 +15,27 @@ Android 모바일 브라우저 사진 선택 경로에서 GPS EXIF가 `null`로 
 | Web media picker adapter | 완료 | `src/platform/media/webMediaPicker.js` |
 | Capacitor media picker adapter | 완료 | `src/platform/media/capacitorMediaPicker.js` |
 | Android original media picker plugin | 완료 | `HeartPinMediaPlugin` + `ACCESS_MEDIA_LOCATION` + `MediaStore.setRequireOriginal(...)` |
-| Mobile upload flow adapter 연결 | 완료 | `src/mobile/MobileUploadFlow.jsx` |
-| Supabase temporary upload path | 완료 | `photos/test-originals/<auth.uid()>/...`, `test_uploads` |
+| Mobile upload flow adapter 연결 | 완료 | `src/mobile/overlays/UploadSheet.jsx`가 `pickPhotos()` 호출 |
 | Android native project | 완료 | `android/` |
-| Android sync | 완료 | `npm run cap:sync` 성공 |
-| Android debug APK build | 완료 | `cd android && ./gradlew assembleDebug` 성공. APK: `android/app/build/outputs/apk/debug/app-debug.apk` |
-| iOS native project | 완료 | Xcode/CocoaPods 설정 후 `npx cap add ios`, `npm run cap:sync` 성공 |
+| Android debug APK build | 진단상 성공 | 과거 `cd android && ./gradlew assembleDebug` 성공. 이 feature 브랜치는 아직 sync·APK 재빌드·Galaxy 설치·실기기 테스트 전 |
+| iOS native project | 생성됨 | `ios/` + CocoaPods 의존성 |
+| iOS simulator/runtime 진단 | 차단됨 | 로컬 Xcode 26.6 (build 17F113)의 플랫폼/CoreSimulator service/version mismatch. 저장소 코드 누락이 아니라 로컬 toolchain 문제이며, local signing도 실기기 설치 전 필요 |
 
-Android original media picker는 MVP 스파이크에서 한 번에 한 장만 선택하도록 제한한다. Galaxy 검증에서 GPS EXIF 보존이 확인된 `ACTION_PICK` + `MediaStore.setRequireOriginal(...)` 경로를 유지하기 위한 결정이며, JS bridge로 원본 파일 여러 장을 base64 전송하는 메모리 위험도 같이 줄인다. 다중 원본 업로드는 네이티브 임시 파일/네이티브 업로드 경로를 설계한 뒤 별도 작업으로 진행한다.
+활성 시트는 `src/mobile/overlays/UploadSheet.jsx`다. 카메라롤 버튼은 `pickPhotos({ source: "library", multiple: true })`를 호출한다. Android에서는 원본과 위치정보를 읽는 native library picker가 한 번에 원본 한 장만 반환하므로, 사용자가 picker를 반복 호출하면 시트가 선택 목록에 누적한다. 카메라 버튼은 Capacitor Camera picker를 사용한다.
+
+`npm run cap:sync`는 웹 코드를 바꿀 때마다 native rebuild 전에 반드시 실행한다. 이 명령은 Vite build도 수행한다.
+
+Supabase 검증 모드에는 커밋하지 않는 `.env.local`의 프로젝트 URL과 publishable key만 필요하다. 로그인 비밀번호, service role key, 실사진 정보는 파일이나 문서에 넣지 않는다.
+
+```dotenv
+VITE_HEARTPIN_API_MODE=supabase
+VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+```
 
 ## Android 환경 준비 필요 항목
 
-현재 확인:
+Android debug build에는 JDK 21과 Android SDK가 필요하다.
 
 ```text
 ./gradlew assembleDebug
@@ -35,10 +44,11 @@ BUILD SUCCESSFUL
 
 Galaxy 실기기 검증 전 준비:
 
-1. `android/local.properties`에 `sdk.dir=/Users/a11791/Library/Android/sdk` 설정
-2. `cd android && ./gradlew assembleDebug`
-3. 생성된 `android/app/build/outputs/apk/debug/app-debug.apk`를 Galaxy에 설치
-4. 또는 Android Studio 설치 후 `npm run cap:android`로 실기기 실행
+1. `android/local.properties`에 로컬 Android SDK 경로를 설정한다.
+2. `.env.local`을 위 Supabase 모드로 설정한다.
+3. `npm run cap:sync`를 실행한다.
+4. `cd android && ./gradlew assembleDebug`로 이 브랜치의 APK를 다시 만든다.
+5. 생성된 APK를 Galaxy에 설치하거나 Android Studio/`npm run cap:android`로 실행한다.
 
 ## iOS 환경 준비 필요 항목
 
@@ -46,22 +56,23 @@ Galaxy 실기기 검증 전 준비:
 
 ```text
 xcodebuild -version
-Xcode 26.5
-
-pod --version
-1.16.2
+Xcode 26.6
+Build version 17F113
 ```
+
+현재 simulator/runtime 진단은 플랫폼/CoreSimulator service/version mismatch로 막혀 있다. iPhone dev install도 이 local toolchain 정리와 Xcode signing team 선택이 끝난 뒤에만 시도한다. 이 상태는 iOS build/install 성공을 의미하지 않는다.
 
 iPhone 실기기 검증 전 준비:
 
-1. `npm run cap:sync`
-2. `npm run cap:ios`
-3. Xcode에서 signing team 선택
-4. iPhone을 연결하고 dev install 실행
-
-현재 회사 노트북에서는 iOS signing/dev install 검증이 제한된다. 과거 테스트에서 Capacitor iOS 사진 선택 경로가 위치정보를 보존하는 것으로 확인됐으므로, MVP 단계에서는 iOS는 기존 Capacitor Camera/Photos picker를 유지한다. iOS native picker는 정식 앱 UX 개선 단계에서 `PHPickerViewController` 기반으로 재검토한다.
+1. Xcode platform/CoreSimulator 상태를 복구하고 CocoaPods 의존성을 준비한다.
+2. `.env.local`을 위 Supabase 모드로 설정한다.
+3. `npm run cap:sync`를 실행한다.
+4. `npm run cap:ios`로 Xcode를 열고 local signing team을 선택한다.
+5. iPhone을 연결하고 dev install을 실행한다.
 
 ## Test Photos
+
+실제 검증에는 알려진 GPS 메타데이터를 가진 JPEG 한 장과, iPhone에서는 HEIC와 JPEG 각 한 장을 사용한다. 개인 파일명, 좌표, 스크린샷은 이 문서에 기록하지 않는다.
 
 | Asset | Format | Has GPS Before Test | Notes |
 | --- | --- | --- | --- |
@@ -71,43 +82,41 @@ iPhone 실기기 검증 전 준비:
 
 ## Results
 
-| Platform | Path | Format | takenAt | lat/lng | Result |
-| --- | --- | --- | --- | --- | --- |
-| Galaxy | Mobile browser file input | JPEG | Not tested yet | Not tested yet | Pending real-device test |
-| Galaxy | Android original media picker | JPEG | Preserved | Preserved | Verified with Supabase test upload |
-| iPhone | Capacitor native picker | HEIC | Not tested yet | Not tested yet | Blocked until iOS toolchain setup |
-| iPhone | Capacitor native picker | JPEG | Not tested yet | Not tested yet | Blocked until iOS toolchain setup |
+이 표는 과거 spike 결과를 보존한다. Galaxy의 GPS 보존 결과는 이전 진단에서의 결과이며, 현재 feature 브랜치가 Galaxy에 sync·설치·재검증됐다는 뜻은 아니다. iOS 결과는 아직 없다.
 
-## Android Test Procedure
+| Platform / path | Format | Observed MIME type | Byte-size class | Capture time preserved | GPS preserved | Display derivative | Thumb derivative | Relay row + object | Organization | Other-device visibility | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Galaxy / Mobile browser file input | JPEG | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending real-device test |
+| Galaxy / Android original media picker | JPEG | Pending recheck | Pending recheck | Historical pass; pending recheck | Historical pass; pending recheck | Pending recheck | Pending recheck | Pending recheck | Pending recheck | Pending recheck | Historical metadata-only Supabase spike result; this feature branch still needs sync, install, and end-to-end device verification |
+| iPhone / Capacitor native picker | HEIC | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Blocked by current local iOS toolchain diagnosis and pending signing/dev install |
+| iPhone / Capacitor native picker | JPEG | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Blocked by current local iOS toolchain diagnosis and pending signing/dev install |
 
-1. Set `.env.local` to Supabase mode.
-2. Run `npm run cap:sync`.
-3. Run `npm run cap:android`.
-4. Open the generated Android project in Android Studio.
-5. Connect Galaxy device with USB debugging enabled.
-6. Install the debug app on device.
-7. Sign in with the Supabase shared auth account.
-8. Prepare one JPEG photo with known GPS metadata.
-9. Select the photo through the Android original media picker path.
-10. Confirm `test_uploads.lat`, `test_uploads.lng`, and `test_uploads.taken_at` in Supabase.
-11. Confirm the original exists under `photos/test-originals/<auth.uid()>/...`, then delete the test object after verification.
+실기기 확인 후 각 format 행의 모든 필드를 개별적으로 갱신한다.
 
-## iOS Test Procedure
+- MIME type은 picker가 반환한 관찰값만 기록한다.
+- Byte-size class는 `small (<5 MB)`, `medium (5–15 MB)`, `large (>15–25 MB)` 중 하나로만 기록하고 정확한 byte 수는 남기지 않는다.
+- Capture time과 GPS는 각각 `Preserved`, `Not preserved`, `Not present before test` 중 하나로 기록한다.
+- Display derivative, Thumb derivative, relay row/object, organization, other-device visibility는 서로 독립적으로 `Pass` 또는 redacted failure로 기록한다. Metadata 보존 성공으로 derivative나 relay 성공을 대신하지 않는다.
+- 파일명, 좌표, Storage object name, signed URL, 계정 정보, device identifier는 기록하지 않는다.
 
-1. Prepare Xcode and CocoaPods.
-2. Set `.env.local` to Supabase mode.
-3. Run `npm run cap:sync`.
-4. Run `npm run cap:ios`.
-5. Install the dev app on iPhone from Xcode.
-6. Sign in with the Supabase shared auth account.
-7. Prepare one HEIC and one JPEG photo with known GPS metadata.
-8. Select each photo in the Capacitor app.
-9. Confirm `test_uploads.lat`, `test_uploads.lng`, and `test_uploads.taken_at` in Supabase.
-10. Confirm the original exists under `photos/test-originals/<auth.uid()>/...`, then delete the test object after verification.
+## Real application verification procedure
+
+Use the same procedure on Galaxy and iPhone after the platform-specific install steps above. Repeat library selection on Android to collect multiple originals in the sheet, and also exercise the Capacitor camera path.
+
+1. Sign in to the Supabase app with the shared auth account and select the logical owner.
+2. Select the known test photo(s) through the active UploadSheet path. On Android, repeat the library selection once per original; confirm the sheet accumulates the choices before upload.
+3. Upload and complete organization: keep each item, place it in an existing or new spot/trip as appropriate, and finish the flow.
+4. Confirm the expected `inbox_items` rows and the created/updated record organization in the app.
+5. Confirm `transfer_queue` has the opposite owner’s pending transfer with its server-managed expiry.
+6. In the private `photos` bucket, confirm the display, thumb, and temporary relay objects exist on their intended paths. Do not expose signed URLs or object names in this document.
+7. Sign in as the other logical owner on the other device. Confirm the organized record is visible and the pending original can be seen through the recipient flow.
+8. Record only pass/fail and non-identifying metadata preservation observations here. Do not treat browser or device persistence, original deletion, or iOS install as verified unless each was actually observed.
+
+The legacy `test_uploads` table and `photos/test-originals/...` prefix are not the real application acceptance path; they remain only for debug/legacy spike use.
 
 ## Decision Rule
 
 - If Galaxy Capacitor native picker preserves GPS, continue Supabase upload work through `pickPhotos()`.
 - If Galaxy Android original media picker preserves GPS, keep `HeartPinMediaPlugin` as the Android library path and continue Supabase upload work through `pickPhotos()`.
 - If Galaxy Android original media picker still strips GPS, keep the Android ZIP/original-file workaround and treat native Android upload as a deeper MediaStore/SAF task.
-- Keep iOS on the existing Capacitor Camera/Photos picker for MVP because prior iOS testing preserved GPS metadata. Revisit a custom iOS native picker only when app-store UX polish becomes the priority.
+- Keep iOS on the existing Capacitor Camera/Photos picker for MVP. Revisit a custom iOS native picker only when app-store UX polish becomes the priority.

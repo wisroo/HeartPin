@@ -2,10 +2,11 @@
  * MobileUploadFlow의 실제 로직(addFiles/start/advance/commitName/nearestSpot/finish)을
  * 그대로 포팅하고, hpm-* 마크업으로 재스킨.  런치/완료 화면은 제거: 끝나면 toast + close.
  * pick → reading(진행률) → confirm(한 장씩) */
-import { Fragment, useState, useRef } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { HP_DATA, suggest, autoLine, hav } from "../../data.js";
 import { buildTripFromGroups } from "../../buildTrip.js";
 import * as api from "../../api.js";
+import { pickPhotos } from "../../platform/media/mediaPicker.js";
 import { Photo, Avatar, Ico } from "../ui/MobileAtoms.jsx";
 
 // 근접 매칭: 세션 스팟 + 기록의 모든 스팟 중 300m 이내 최단 (MobileUploadFlow에서 그대로)
@@ -24,14 +25,26 @@ function nearestSpot(item, sessionSpots) {
   return best;
 }
 
+function revokePreviewURLs(previewUrlsRef) {
+  previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+  previewUrlsRef.current.clear();
+}
+
 export default function UploadSheet({ app, nav, settings }) {
   const owner = settings.myChar || "bara";
   const [screen, setScreen] = useState("pick"); // pick | reading | confirm
   const [src, setSrc] = useState("roll");
-  const [files, setFiles] = useState([]); // {id, file, url}
+  const [files, setFiles] = useState([]); // {id, item, file, url}
   const [sel, setSel] = useState(() => new Set());
   const [prog, setProg] = useState(0);
   const [errMsg, setErrMsg] = useState(null);
+  const [picking, setPicking] = useState(false);
+  const mountedRef = useRef(false);
+  const pickerInFlightRef = useRef(false);
+  const nextFileIdRef = useRef(1);
+  const filesRef = useRef([]);
+  const selectionRef = useRef(new Set());
+  const previewUrlsRef = useRef(new Set());
 
   const [queue, setQueue] = useState([]); // 서버가 만든 inbox 아이템들 (이번 업로드분)
   const [idx, setIdx] = useState(0);
@@ -42,19 +55,70 @@ export default function UploadSheet({ app, nav, settings }) {
   const [dupCount, setDupCount] = useState(0);
   const [saving, setSaving] = useState(false);
 
-  const rollRef = useRef(null), camRef = useRef(null);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      pickerInFlightRef.current = false;
+      revokePreviewURLs(previewUrlsRef);
+    };
+  }, []);
 
-  const addFiles = (fileList) => {
-    const imgs = [...fileList].filter((f) => f.type.indexOf("image/") === 0 || /\.(heic|heif)$/i.test(f.name));
-    setFiles((prev) => {
-      const seen = new Set(prev.map((p) => p.file.name + "|" + p.file.size));
-      const fresh = imgs.filter((f) => !seen.has(f.name + "|" + f.size))
-        .map((f, i) => ({ id: "f" + Date.now() + "_" + i, file: f, url: URL.createObjectURL(f) }));
-      setSel((s) => { const n = new Set(s); fresh.forEach((x) => n.add(x.id)); return n; });
-      return prev.concat(fresh);
+  const addFiles = (items) => {
+    const imgs = items.filter((item) => item.mimeType.indexOf("image/") === 0 || /\.(heic|heif)$/i.test(item.name));
+    const seen = new Set(filesRef.current.map((choice) => choice.item.name + "|" + choice.item.size));
+    const fresh = [];
+    imgs.forEach((item) => {
+      const key = item.name + "|" + item.size;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const url = URL.createObjectURL(item.file);
+      previewUrlsRef.current.add(url);
+      fresh.push({
+        id: "f" + nextFileIdRef.current++,
+        item,
+        file: item.file,
+        url,
+      });
     });
+    if (!fresh.length) return;
+
+    const nextFiles = filesRef.current.concat(fresh);
+    const nextSelection = new Set(selectionRef.current);
+    fresh.forEach((choice) => nextSelection.add(choice.id));
+    filesRef.current = nextFiles;
+    selectionRef.current = nextSelection;
+    setFiles(nextFiles);
+    setSel(nextSelection);
   };
-  const toggle = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const openPicker = async (source) => {
+    if (pickerInFlightRef.current) return;
+    pickerInFlightRef.current = true;
+    setPicking(true);
+    setSrc(source === "library" ? "roll" : "cam");
+    setErrMsg(null);
+    try {
+      const items = await pickPhotos({ source, multiple: source === "library" });
+      if (!mountedRef.current) return;
+      if (!items.length) return;
+      addFiles(items);
+    } catch (error) {
+      if (mountedRef.current) setErrMsg(error.message);
+    } finally {
+      pickerInFlightRef.current = false;
+      if (mountedRef.current) setPicking(false);
+    }
+  };
+  const toggle = (id) => {
+    const nextSelection = new Set(selectionRef.current);
+    nextSelection.has(id) ? nextSelection.delete(id) : nextSelection.add(id);
+    selectionRef.current = nextSelection;
+    setSel(nextSelection);
+  };
+  const closeSheet = () => {
+    revokePreviewURLs(previewUrlsRef);
+    nav.close();
+  };
 
   // ── 업로드 시작: 서버가 EXIF·해시·압축 처리 ──
   const start = async () => {
@@ -62,7 +126,7 @@ export default function UploadSheet({ app, nav, settings }) {
     if (!chosen.length) return;
     setScreen("reading"); setProg(0); setErrMsg(null);
     try {
-      const result = await api.uploadPhotos(chosen.map((c) => c.file), owner, setProg);
+      const result = await api.uploadPhotos(chosen.map((c) => c.item), owner, setProg);
       app.apply(result.state);
       setDupCount(result.duplicates.length);
       setQueue(result.added); setIdx(0); setDec({}); setSessionSpots([]);
@@ -116,7 +180,7 @@ export default function UploadSheet({ app, nav, settings }) {
   // ── 끝맺음: 완료 화면 대신 toast + close ──
   const endUpload = (keptN) => {
     nav.toast(keptN ? `${keptN}장 정리에 담았어요` : "올릴 새 사진이 없었어요");
-    nav.close();
+    closeSheet();
   };
 
   // ── 완료: 결정을 ops로 변환 (기존 여정 배치 / 새 여행 조립 / 버리기) ──
@@ -159,16 +223,12 @@ export default function UploadSheet({ app, nav, settings }) {
 
   // ════════ PICK ════════
   if (screen === "pick") {
-    const closePick = () => {
-      files.forEach((f) => URL.revokeObjectURL(f.url));
-      nav.close();
-    };
     return (
-      <div className="hpm-overlay" onClick={(e) => { if (e.target === e.currentTarget) closePick(); }}>
+      <div className="hpm-overlay" onClick={(e) => { if (e.target === e.currentTarget) closeSheet(); }}>
         <div className="hpm-sheet-modal">
           <div className="hpm-up-head">
             <div className="ttl">사진 올리기</div>
-            <button className="ic" onClick={closePick} style={{ width: 34, height: 34, border: "1.5px solid var(--line2)", borderRadius: 11, color: "var(--ink2)" }}>✕</button>
+            <button className="ic" onClick={closeSheet} style={{ width: 34, height: 34, border: "1.5px solid var(--line2)", borderRadius: 11, color: "var(--ink2)" }}>✕</button>
           </div>
           <div className="hpm-up-body" style={{ maxHeight: "70vh" }}>
             <div className="hpm-speech bara" style={{ marginBottom: 14 }}>
@@ -176,11 +236,9 @@ export default function UploadSheet({ app, nav, settings }) {
               <div className="hpm-bubble"><p>여행 중 찍은 거 그냥 다 골라줘! 정리는 내가 할게 🐻✨</p></div>
             </div>
             <div className="hpm-src">
-              <button className={src === "roll" ? "on" : ""} onClick={() => { setSrc("roll"); rollRef.current?.click(); }}><span className="ic"><Ico.image width="24" height="24" /></span><span className="lb">카메라롤</span></button>
-              <button className={src === "cam" ? "on" : ""} onClick={() => { setSrc("cam"); camRef.current?.click(); }}><span className="ic"><Ico.cam width="24" height="24" /></span><span className="lb">바로 찍기</span></button>
+              <button className={src === "roll" ? "on" : ""} disabled={picking} onClick={() => openPicker("library")}><span className="ic"><Ico.image width="24" height="24" /></span><span className="lb">카메라롤</span></button>
+              <button className={src === "cam" ? "on" : ""} disabled={picking} onClick={() => openPicker("camera")}><span className="ic"><Ico.cam width="24" height="24" /></span><span className="lb">바로 찍기</span></button>
             </div>
-            <input ref={rollRef} type="file" accept="image/*,.heic,.heif" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
-            <input ref={camRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
             {errMsg && <p className="hpm-err" style={{ color: "var(--sd)", fontSize: 13, margin: "8px 0" }}>⚠️ {errMsg}</p>}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={{ fontFamily: "var(--fd)", fontSize: 15, color: "var(--ink)" }}>{files.length ? "고른 사진" : "최근 사진"}</span>

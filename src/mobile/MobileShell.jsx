@@ -10,6 +10,7 @@ import JourneyPlayer from "./overlays/JourneyPlayer.jsx";
 import SettingsScreen from "./overlays/SettingsScreen.jsx";
 import CoupleScreen from "./overlays/CoupleScreen.jsx";
 import UploadSheet from "./overlays/UploadSheet.jsx";
+import RecipientTransfersScreen from "./overlays/RecipientTransfersScreen.jsx";
 
 const TABS = [
   ["journey", "여정", "journey"],
@@ -69,6 +70,7 @@ export default function MobileShell({ app, settings, setSettings }) {
     openSettings: () => push({ type: "settings" }),
     openCouple: () => push({ type: "couple" }),
     openUpload: () => push({ type: "upload" }),
+    openRecipientTransfers: () => push({ type: "recipientTransfers" }),
     close: () => setOverlays([]),
     toast: showToast,
     setSettings,
@@ -172,6 +174,9 @@ export default function MobileShell({ app, settings, setSettings }) {
           )}
           {o.type === "upload" && (
             <UploadSheet app={app} nav={nav} settings={settings} />
+          )}
+          {o.type === "recipientTransfers" && (
+            <RecipientTransfersScreen nav={nav} owner={settings.myChar} />
           )}
         </div>
       ))}
