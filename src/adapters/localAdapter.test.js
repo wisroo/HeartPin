@@ -50,15 +50,7 @@ describe("local upload preparation", () => {
     });
     const normalizedItem = {
       file,
-      bytes: new Uint8Array([1]),
-      name: "wrapped.jpg",
-      mimeType: "image/jpeg",
-      size: file.size,
-      lastModified: 123,
-      takenAt: "2023-11-14T22:13:20.000Z",
-      lat: 37.5665,
-      lng: 126.978,
-      source: "library"
+      bytes: new Uint8Array([1])
     };
     const append = vi.spyOn(FormData.prototype, "append");
 
