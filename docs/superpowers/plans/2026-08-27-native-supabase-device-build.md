@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-27-native-supabase-device-build-design.md`
 
+**Current status (2026-10-07):** Tasks 1–5 and Task 6 Step 1 shipped in PR #10 (`bd2666a`). The remaining work starts at Task 6 Step 2 and is Local-only because it requires the uncommitted Supabase environment, authenticated dashboard access, browsers, signing, and physical devices.
+
 ## Global Constraints
 
 - Work on a new `feature/native-supabase-device-build` branch in an isolated worktree for repository changes. Do not copy `.env.local`, signing material, test photos, or `android/local.properties` into that worktree.
@@ -31,7 +33,7 @@
 - Modify: `src/platform/media/mediaPicker.test.jsx`
 - Modify: `src/platform/media/mediaPickerRuntime.test.jsx`
 
-- [ ] **Step 1: Write the failing web cancellation test**
+- [x] **Step 1: Write the failing web cancellation test**
 
   Extend `src/platform/media/mediaPicker.test.jsx` to spy on `document.createElement`, capture the generated file input, call `pickWebPhotos()`, invoke `input.oncancel()`, and assert that the promise resolves to `[]`.
 
@@ -48,7 +50,7 @@
   });
   ```
 
-- [ ] **Step 2: Run the focused test and confirm RED**
+- [x] **Step 2: Run the focused test and confirm RED**
 
   Run:
 
@@ -58,11 +60,11 @@
 
   Expected: the new cancellation test fails because `input.oncancel` is not assigned.
 
-- [ ] **Step 3: Implement cancellation without changing selection behavior**
+- [x] **Step 3: Implement cancellation without changing selection behavior**
 
   In `pickWebPhotos()`, assign `input.oncancel = () => resolve([])` before `input.click()`. Keep `onchange` normalization and error rejection unchanged.
 
-- [ ] **Step 4: Add missing routing tests**
+- [x] **Step 4: Add missing routing tests**
 
   Extend `src/platform/media/mediaPickerRuntime.test.jsx` with:
 
@@ -70,7 +72,7 @@
   - Native Android camera routes `{ source: "camera", multiple: false }` to `pickCapacitorPhotos()` and never calls `pickAndroidOriginalPhotos()`.
   - Existing Android library and iOS native expectations remain unchanged.
 
-- [ ] **Step 5: Run focused tests and confirm GREEN**
+- [x] **Step 5: Run focused tests and confirm GREEN**
 
   Run:
 
@@ -80,7 +82,7 @@
 
   Expected: both files pass, with cancellation returning `[]` and all three runtime branches protected.
 
-- [ ] **Step 6: Commit the picker contract change**
+- [x] **Step 6: Commit the picker contract change**
 
   ```bash
   git add src/platform/media/webMediaPicker.js src/platform/media/mediaPicker.test.jsx src/platform/media/mediaPickerRuntime.test.jsx
@@ -97,7 +99,7 @@
 - Modify: `src/adapters/localAdapter.js`
 - Modify: `src/adapters/localAdapter.test.js`
 
-- [ ] **Step 1: Write failing unit tests for the adapter seam**
+- [x] **Step 1: Write failing unit tests for the adapter seam**
 
   Export a small pure helper named `localUploadFile` from `localAdapter.js`, then first write tests that define its required behavior:
 
@@ -108,7 +110,7 @@
 
   Add a multipart test using mocked `XMLHttpRequest` and a `FormData.prototype.append` spy. Call `localAdapter.uploadPhotos([normalizedItem], "bara")` and assert the `photos` field receives the underlying `File`, its name, and that `lastModified` uses the underlying file value.
 
-- [ ] **Step 2: Run the focused test and confirm RED**
+- [x] **Step 2: Run the focused test and confirm RED**
 
   Run:
 
@@ -118,7 +120,7 @@
 
   Expected: import or payload assertions fail because `localUploadFile` does not exist and the adapter treats the wrapper as a `File`.
 
-- [ ] **Step 3: Implement the narrow compatibility helper**
+- [x] **Step 3: Implement the narrow compatibility helper**
 
   Add:
 
@@ -130,7 +132,7 @@
 
   In `localAdapter.uploadPhotos()`, call the helper for every input before appending `photos` and `lastModified`. Do not change desktop callers or the Local HTTP API.
 
-- [ ] **Step 4: Run the focused test and confirm GREEN**
+- [x] **Step 4: Run the focused test and confirm GREEN**
 
   Run:
 
@@ -140,7 +142,7 @@
 
   Expected: existing URL tests and new plain/wrapped file tests pass.
 
-- [ ] **Step 5: Commit the adapter seam**
+- [x] **Step 5: Commit the adapter seam**
 
   ```bash
   git add src/adapters/localAdapter.js src/adapters/localAdapter.test.js
@@ -157,7 +159,7 @@
 - Modify: `src/mobile/overlays/UploadSheet.jsx`
 - Modify: `src/mobile/overlays/UploadSheet.test.jsx`
 
-- [ ] **Step 1: Replace file-input tests with media-picker behavior tests**
+- [x] **Step 1: Replace file-input tests with media-picker behavior tests**
 
   Mock `../../platform/media/mediaPicker.js` and build normalized fixtures whose `file` is a browser `File` and whose metadata fields are all present. Add tests for these user-visible contracts:
 
@@ -171,7 +173,7 @@
   - Starting upload passes the full normalized item array as argument zero and owner `bara` as argument one.
   - Closing the sheet revokes every created preview object URL.
 
-- [ ] **Step 2: Run the focused test and confirm RED**
+- [x] **Step 2: Run the focused test and confirm RED**
 
   Run:
 
@@ -181,7 +183,7 @@
 
   Expected: picker calls and normalized upload assertions fail because the sheet still uses hidden HTML file inputs and sends plain files.
 
-- [ ] **Step 3: Implement one picker handler**
+- [x] **Step 3: Implement one picker handler**
 
   In `UploadSheet.jsx`:
 
@@ -195,7 +197,7 @@
   - In `start()`, pass `chosen.map((choice) => choice.item)` to `api.uploadPhotos()`.
   - Keep object URL revocation in `closePick()` and do not add a new removal UX.
 
-- [ ] **Step 4: Run the focused UI test and confirm GREEN**
+- [x] **Step 4: Run the focused UI test and confirm GREEN**
 
   Run:
 
@@ -205,7 +207,7 @@
 
   Expected: all picker, accumulation, cancellation, error, payload, and cleanup assertions pass.
 
-- [ ] **Step 5: Run picker and upload-preparation regression tests**
+- [x] **Step 5: Run picker and upload-preparation regression tests**
 
   Run:
 
@@ -215,7 +217,7 @@
 
   Expected: platform normalization, Android/iOS routing, normalized Supabase metadata preference, Local compatibility, and Mobile UI tests all pass.
 
-- [ ] **Step 6: Commit the active-flow integration**
+- [x] **Step 6: Commit the active-flow integration**
 
   ```bash
   git add src/mobile/overlays/UploadSheet.jsx src/mobile/overlays/UploadSheet.test.jsx
@@ -234,7 +236,7 @@
 - Read-only contract inputs: `android/app/src/main/AndroidManifest.xml`
 - Read-only contract inputs: `android/app/src/main/java/com/heartpin/app/MainActivity.java`
 
-- [ ] **Step 1: Write a failing native-source contract test**
+- [x] **Step 1: Write a failing native-source contract test**
 
   Create `nativeConfig.test.js` with these exact source paths:
 
@@ -256,7 +258,7 @@
   - Android Manifest still includes `READ_MEDIA_IMAGES` and `ACCESS_MEDIA_LOCATION`.
   - `MainActivity` still calls `registerPlugin(HeartPinMediaPlugin.class)`.
 
-- [ ] **Step 2: Run the focused test and confirm RED**
+- [x] **Step 2: Run the focused test and confirm RED**
 
   Run:
 
@@ -266,7 +268,7 @@
 
   Expected: iOS usage-description assertions fail; existing Android contract assertions pass.
 
-- [ ] **Step 3: Add only the two required iOS descriptions**
+- [x] **Step 3: Add only the two required iOS descriptions**
 
   Add these keys inside the root dictionary of `Info.plist`:
 
@@ -279,7 +281,7 @@
 
   Do not add a photo-library add/save description until native recipient save is implemented.
 
-- [ ] **Step 4: Validate plist syntax and run the focused test**
+- [x] **Step 4: Validate plist syntax and run the focused test**
 
   Run:
 
@@ -290,7 +292,7 @@
 
   Expected: `plutil` reports `OK` and the contract test passes.
 
-- [ ] **Step 5: Commit native configuration**
+- [x] **Step 5: Commit native configuration**
 
   ```bash
   git add ios/App/App/Info.plist src/platform/media/nativeConfig.test.js
@@ -308,7 +310,7 @@
 - Modify only if its commands are stale: `README.md`
 - Modify only if milestone state needs correction: `docs/ROADMAP.md`
 
-- [ ] **Step 1: Correct the active integration description**
+- [x] **Step 1: Correct the active integration description**
 
   Replace the stale `src/mobile/MobileUploadFlow.jsx` reference with `src/mobile/overlays/UploadSheet.jsx`. Document that:
 
@@ -319,15 +321,15 @@
   - Supabase mode requires only the project URL and publishable key in uncommitted `.env.local`;
   - the present iOS blocker is the local Xcode 26.6 platform/CoreSimulator mismatch plus local signing, not missing repository code.
 
-- [ ] **Step 2: Replace temporary-spike verification with the real application path**
+- [x] **Step 2: Replace temporary-spike verification with the real application path**
 
   Update Galaxy and iPhone procedures to verify `inbox_items`, `transfer_queue`, the private `photos` bucket's display/thumb/relay objects, organization completion, and visibility on the other signed-in device. Preserve the existing results table until real-device results are available.
 
-- [ ] **Step 3: Review documentation for private data**
+- [x] **Step 3: Review documentation for private data**
 
   Confirm no URL, key, email, filename, coordinate, device identifier, signing-team identifier, or personal screenshot was added.
 
-- [ ] **Step 4: Run the complete cloud-friendly verification gate**
+- [x] **Step 4: Run the complete cloud-friendly verification gate**
 
   Run:
 
@@ -339,7 +341,7 @@
 
   Expected: the full Vitest suite passes, Vite emits `dist/`, and the diff check has no output.
 
-- [ ] **Step 5: Self-review only the milestone diff**
+- [x] **Step 5: Self-review only the milestone diff**
 
   Run:
 
@@ -351,7 +353,7 @@
 
   Confirm every changed line traces to the approved design and unrelated user files remain untouched.
 
-- [ ] **Step 6: Commit workflow documentation**
+- [x] **Step 6: Commit workflow documentation**
 
   Stage only the documentation files actually changed:
 
@@ -373,7 +375,7 @@
 - Operator-applied schema: `supabase/schema.sql`
 - Read-only verification: Supabase dashboard tables, policies, functions, and Storage configuration
 
-- [ ] **Step 1: Review and integrate the feature branch**
+- [x] **Step 1: Review and integrate the feature branch**
 
   Use the `superpowers:finishing-a-development-branch` skill. Require a clean focused diff and passing Task 5 verification before merging to local `main`. Do not push unless the user explicitly requests it.
 
@@ -528,11 +530,11 @@
 
 ## Completion Criteria
 
-- [ ] `UploadSheet` invokes platform-native library/camera paths and uploads full normalized items.
-- [ ] Web cancellation, Local compatibility, native permission contracts, and Supabase metadata preservation have focused tests.
-- [ ] Full Vitest, Vite build, plist lint, and diff checks pass.
+- [x] `UploadSheet` invokes platform-native library/camera paths and uploads full normalized items.
+- [x] Web cancellation, Local compatibility, native permission contracts, and Supabase metadata preservation have focused tests.
+- [x] Full Vitest, Vite build, plist lint, and diff checks pass.
 - [ ] The disposable Supabase project matches `supabase/schema.sql` and passes a two-client persistence smoke test.
 - [ ] A Galaxy debug APK builds, installs, and passes redacted JPEG metadata/relay verification.
 - [ ] An iPhone development build installs and passes redacted HEIC and JPEG metadata/derivative/relay verification.
 - [ ] Development update workflow is proven: change code, run tests/build, `npm run cap:sync`, rebuild, and reinstall/update the dev app.
-- [ ] No secret, signing material, local path file, photo, filename, coordinate, or unrelated user change is committed.
+- [x] No secret, signing material, local path file, photo, filename, coordinate, or unrelated user change is committed.
