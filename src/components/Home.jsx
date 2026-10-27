@@ -45,7 +45,19 @@ export default function Home({ regions, region, trips, onRegion, onOpenTrip, onO
 
         <section className="hp-home-sec">
           <div className="hp-home-sechead"><h3>최근 여행</h3><span>{`${trips.length}개`}</span></div>
-          <div className="hp-home-trips">
+          {trips.length === 0 ? (
+            <div className="hp-home-empty" role="region" aria-label="첫 여행 안내">
+              <img src={CHAR.bara.src} alt="바라" />
+              <div className="hp-home-empty-copy">
+                <h4>아직 이쪽 여행이 없어요</h4>
+                <p>사진을 올리면 날짜와 위치를 읽어 첫 여정을 정리해 드릴게요.</p>
+              </div>
+              <div className="hp-home-empty-actions">
+                <button type="button" className="hp-hero-btn" onClick={onNewTrip}>첫 여행 만들기</button>
+                <button type="button" className="hp-hero-btn ghost" onClick={onUpload}>사진 불러오기</button>
+              </div>
+            </div>
+          ) : <div className="hp-home-trips">
             {trips.map((t) => {
               const o = ordered(t);
               const photos = o.reduce((a, s) => a + s.photos.length, 0);
@@ -67,7 +79,7 @@ export default function Home({ regions, region, trips, onRegion, onOpenTrip, onO
               <span className="hp-htrip-newt">새 여행 만들기</span>
               <span className="hp-htrip-newsub">사진을 올리면 자동으로 정리해요</span>
             </button>
-          </div>
+          </div>}
         </section>
 
         <section className="hp-home-quick">
