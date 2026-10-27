@@ -39,8 +39,8 @@ function SupabaseLogin({ message }) {
   return (
     <div className="hp-app hp-boot">
       <form className="hp-login" onSubmit={submit}>
-        <h1>Supabase 로그인</h1>
-        <p>{message}</p>
+        <h1>HeartPin 로그인</h1>
+        <p>{message === "Supabase 로그인이 필요해요" ? "로그인이 필요해요" : message}</p>
         <label>
           이메일
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />

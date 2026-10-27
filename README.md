@@ -6,6 +6,8 @@ claude.ai/design 프로토타입(`HeartPin.html`)을 Vite + React로 구현한 �
 
 ## 실행
 
+Node.js `24.22.1`을 사용합니다 (`.nvmrc`, `package.json`의 `engines`). Node 20은 현재 Supabase 클라이언트 초기화 시 기본 WebSocket이 없어 실패할 수 있습니다. Node 버전 관리자를 사용하는 경우 `nvm install && nvm use` 후 아래 명령을 실행하세요.
+
 ```bash
 npm install
 npm run dev      # 개발 서버

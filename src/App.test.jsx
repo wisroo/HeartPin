@@ -79,8 +79,8 @@ describe("App", () => {
     expect(screen.queryByTestId("web-app")).not.toBeInTheDocument();
   });
 
-  it("renders Supabase login when a Supabase session is required", async () => {
-    useResponsiveMode.mockReturnValue("mobile");
+  it("renders HeartPin login on web when a Supabase session is required", async () => {
+    useResponsiveMode.mockReturnValue("web");
     api.getApiMode.mockReturnValue("supabase");
     useHeartPinState.mockReturnValue({
       ...appState,
@@ -90,6 +90,8 @@ describe("App", () => {
 
     render(<App />);
 
+    expect(screen.getByRole("heading", { name: "HeartPin 로그인" })).toBeInTheDocument();
+    expect(screen.getByText("로그인이 필요해요")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("이메일"), { target: { value: "heartpin@example.com" } });
     fireEvent.change(screen.getByLabelText("비밀번호"), { target: { value: "secret-password" } });
     fireEvent.click(screen.getByRole("button", { name: "로그인" }));
