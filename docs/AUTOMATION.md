@@ -15,8 +15,8 @@
 
 권장 로컬 기준:
 
-- Node.js: `20.20.2`
-- npm: `10.8.2`
+- Node.js: `24.22.1` (`.nvmrc` 기준)
+- npm: Node.js `24.22.1`에 포함된 버전
 - 의존성 설치: `npm ci`
 - 빌드 검증: `npm run build`
 

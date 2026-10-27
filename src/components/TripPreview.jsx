@@ -36,7 +36,9 @@ export default function TripPreview({ draft, onCancel, onSave }) {
                   <div className="hp-pv-spotmain">
                     <input className="hp-pv-name" value={s.name} onChange={(e) => setSpotName(di, si, e.target.value)} />
                     <div className="hp-pv-thumbs">
-                      {s.photos.slice(0, 5).map((p, k) => <Photo key={k} photo={p} className="hp-pv-thumb" />)}
+                      {s.photos.slice(0, 5).map((p, k) => p.thumb || p.src
+                        ? <img key={k} src={p.thumb || p.src} alt={p.label || `사진 ${k + 1}`} className="hp-pv-thumb" />
+                        : <Photo key={k} photo={p} className="hp-pv-thumb" />)}
                       {s.photos.length > 5 && <span className="hp-pv-more">+{s.photos.length - 5}</span>}
                     </div>
                   </div>
@@ -47,7 +49,7 @@ export default function TripPreview({ draft, onCancel, onSave }) {
           ))}
         </div>
         <div className="hp-preview-foot">
-          <span className="hp-preview-note">장소 이름은 나중에 위치로 자동 채워져요</span>
+          <span className="hp-preview-note">장소 이름을 직접 입력해 주세요</span>
           <button className="hp-bar-ghost" type="button" onClick={onCancel}>취소</button>
           <button className="hp-bar-act" type="button" onClick={() => onSave(trip)}>이 여행 저장</button>
         </div>
