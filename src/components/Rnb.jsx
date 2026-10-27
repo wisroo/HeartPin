@@ -60,7 +60,12 @@ function Overview({ regions, region, onRegion, trips, onSelectTrip }) {
           </button>
         ))}
       </div>
-      <div className="hp-trip-list">
+      {trips.length === 0 ? (
+        <div className="hp-rnb-empty" role="region" aria-label="기록 시작 안내">
+          <h3>첫 여행을 만들어 지도에 핀을 남겨보세요</h3>
+          <p>상단 HeartPin 로고로 홈에 돌아가 새 여행을 만들거나, 사진을 불러와 기록을 시작해 보세요.</p>
+        </div>
+      ) : <div className="hp-trip-list">
         {trips.map((t) => {
           const o = ordered(t);
           const photos = o.reduce((a, s) => a + s.photos.length, 0);
@@ -77,7 +82,7 @@ function Overview({ regions, region, onRegion, trips, onSelectTrip }) {
             </button>
           );
         })}
-      </div>
+      </div>}
       <div className="hp-rnb-foot">
         <Speech who="bara" text="사진을 불러오면 날짜·장소별로 정리해 둘게. 오늘은 어디부터 다시 가볼까?" compact />
       </div>
