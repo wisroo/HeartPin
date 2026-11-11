@@ -1,3 +1,4 @@
+import OriginalCopyLocations from "../../features/photos/OriginalCopyLocations.jsx";
 import { useState } from "react";
 import { Photo, Avatar } from "../ui/MobileAtoms.jsx";
 import { mobileLines } from "../screens/TripDetail.jsx";
@@ -5,6 +6,7 @@ import { mobileLines } from "../screens/TripDetail.jsx";
 export default function MomentViewer({ spot, startIdx = 0, nav, settings }) {
   const [i, setI] = useState(startIdx);
   const photos = spot.photos || [];
+  const photo = photos[i];
   const ln = mobileLines(spot, settings);
 
   return (
@@ -14,7 +16,7 @@ export default function MomentViewer({ spot, startIdx = 0, nav, settings }) {
         <button className="hpm-moment-close" onClick={nav.back}>✕</button>
       </div>
       <div className="hpm-moment-stage">
-        {photos[i] && <Photo photo={photos[i]} />}
+        {photo && <Photo photo={photo} />}
       </div>
       <div className="hpm-moment-react">
         <div className="hpm-speech nyong" style={{ alignItems: "flex-start" }}>
@@ -22,17 +24,18 @@ export default function MomentViewer({ spot, startIdx = 0, nav, settings }) {
           <div className="hpm-moment-bubble">{ln.reaction}</div>
         </div>
       </div>
+      {photo && <OriginalCopyLocations key={photo.content_hash} contentHash={photo.content_hash} />}
       <div className="hpm-moment-strip">
         {photos.map((ph, pi) => (
-          <button key={pi} onClick={() => setI(pi)}>
+          <button key={ph.id ?? pi} onClick={() => setI(pi)}>
             <Photo photo={ph} cap={false} className={pi === i ? "on" : ""} />
           </button>
         ))}
       </div>
       <div className="hpm-moment-pager">
-        <button className="hpm-moment-arrow" disabled={i <= 0} onClick={() => setI(i - 1)}>‹</button>
+        <button className="hpm-moment-arrow" aria-label="이전 사진" disabled={i <= 0} onClick={() => setI(i - 1)}>‹</button>
         <span className="hpm-moment-count">{i + 1} / {photos.length}</span>
-        <button className="hpm-moment-arrow" disabled={i >= photos.length - 1} onClick={() => setI(i + 1)}>›</button>
+        <button className="hpm-moment-arrow" aria-label="다음 사진" disabled={i >= photos.length - 1} onClick={() => setI(i + 1)}>›</button>
       </div>
     </div>
   );

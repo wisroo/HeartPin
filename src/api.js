@@ -29,6 +29,19 @@ export function uploadPhotos(files, owner, onProgress) {
   return adapter.uploadPhotos(files, owner, onProgress);
 }
 
+export async function setOriginalPushRegistration(installationId, registration) {
+  if (API_MODE !== "supabase") throw new Error("Supabase 모드에서만 원본 도착 알림을 설정할 수 있어요.");
+  return adapter.setOriginalPushRegistration(installationId, registration);
+}
+
+export async function getOriginalStorageSummary(owner) {
+  return API_MODE === "supabase" ? adapter.getOriginalStorageSummary(owner) : null;
+}
+
+export async function listConfirmedOriginalLocations(contentHash) {
+  return API_MODE === "supabase" ? adapter.listConfirmedOriginalLocations(contentHash) : null;
+}
+
 export function listIncomingTransfers(owner) {
   if (API_MODE !== "supabase" || !adapter.listIncomingTransfers) {
     throw new Error("Supabase 모드에서만 원본 전송을 받을 수 있어요.");

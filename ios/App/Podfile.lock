@@ -7,6 +7,8 @@ PODS:
   - CapacitorFilesystem (7.1.8):
     - Capacitor
     - IONFilesystemLib (~> 1.1.1)
+  - CapacitorPushNotifications (7.0.7):
+    - Capacitor
   - IONFilesystemLib (1.1.2)
 
 DEPENDENCIES:
@@ -14,6 +16,7 @@ DEPENDENCIES:
   - "CapacitorCamera (from `../../node_modules/@capacitor/camera`)"
   - "CapacitorCordova (from `../../node_modules/@capacitor/ios`)"
   - "CapacitorFilesystem (from `../../node_modules/@capacitor/filesystem`)"
+  - "CapacitorPushNotifications (from `../../node_modules/@capacitor/push-notifications`)"
 
 SPEC REPOS:
   trunk:
@@ -28,14 +31,17 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capacitor/ios"
   CapacitorFilesystem:
     :path: "../../node_modules/@capacitor/filesystem"
+  CapacitorPushNotifications:
+    :path: "../../node_modules/@capacitor/push-notifications"
 
 SPEC CHECKSUMS:
   Capacitor: 8ef25ba872436d2c5ac2a4791f7255529bdcd93b
   CapacitorCamera: 9e952270be355797f769aa835bb7643a96c871fe
   CapacitorCordova: 139e2ed3d91c54b5aeae7941135c9f9aefc6da1d
   CapacitorFilesystem: c63fc54df41e5a6761785a7f3c49dc696c22e296
+  CapacitorPushNotifications: 0527809a9619ed775439d5ab2c2d996122b48319
   IONFilesystemLib: 21a63377696b2d8fab5632ecfb7d2ac67bddb68a
 
-PODFILE CHECKSUM: 7c1b263e26ad379bc9deee0b2cd4fecf99aaa814
+PODFILE CHECKSUM: 430ad62aa79e91952fd9b5a4899f7aa54434311a
 
 COCOAPODS: 1.16.2

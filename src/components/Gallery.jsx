@@ -1,4 +1,5 @@
 /* HeartPin · Moment viewer — docked over the map area, ‹ 사진 › pager */
+import OriginalCopyLocations from "../features/photos/OriginalCopyLocations.jsx";
 import { CHAR } from "../chars.js";
 import { Photo } from "./ui.jsx";
 
@@ -33,6 +34,7 @@ export default function Gallery({ spot, photoIndex, onClose, onSelect, onPrev, o
           <img src={CHAR.nyong.src} className="hp-avatar" style={{ width: 40, height: 40 }} alt="뇽이" />
           <p>{spot.reaction}</p>
         </div>
+        {photo && <OriginalCopyLocations key={photo.content_hash} contentHash={photo.content_hash} />}
         {many && (
           <div className="hp-gallery-strip">
             {spot.photos.map((p, i) => (

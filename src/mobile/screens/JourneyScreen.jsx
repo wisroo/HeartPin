@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Photo, Avatar, Ico } from "../ui/MobileAtoms.jsx";
-import { ordered } from "../../data.js";
 
 function tripStats(trip) {
   let spots = 0, photos = 0;
@@ -40,7 +39,12 @@ export default function JourneyScreen({ app, nav, settings }) {
                 <Avatar who="nyong" size={32} style={{ marginLeft: -11 }} />
               </div>
             </div>
-            <div className="hpm-strip-line"><Ico.chat width="15" height="15" />가장 가까운 추억 · <b>오사카 여행, 다시 볼까요?</b></div>
+            {totTrips === 0 && (
+              <div className="hpm-first-trip">
+                <p>사진을 올려 첫 여행을 만들어보세요.</p>
+                <button type="button" className="hpm-btn" onClick={nav.openUpload}>첫 여행 만들기</button>
+              </div>
+            )}
           </div>
 
           <div className="hpm-seg" style={{ marginBottom: 13 }}>

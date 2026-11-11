@@ -1,4 +1,5 @@
-import { useMemo, useState, useRef } from "react";
+import OriginalStorageScreen from "./overlays/OriginalStorageScreen.jsx";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { Ico } from "./ui/MobileAtoms.jsx";
 import JourneyScreen from "./screens/JourneyScreen.jsx";
 import TripDetail from "./screens/TripDetail.jsx";
@@ -22,7 +23,9 @@ const TABS = [
 const detectPlatform = () =>
   /iPhone|iPad|iPod/.test(navigator.userAgent) ? "ios" : "android";
 
-export default function MobileShell({ app, settings, setSettings }) {
+export default function MobileShell({
+  app, settings, setSettings, originalArrivalPending, onOriginalArrivalHandled, originalPushAvailable, originalPushError,
+}) {
   const [tab, setTab] = useState("journey");
   const [detail, setDetail] = useState(null);
   const [mapEntry, setMapEntry] = useState(null);
@@ -33,6 +36,14 @@ export default function MobileShell({ app, settings, setSettings }) {
     ...app.regions.domestic.trips,
     ...app.regions.intl.trips,
   ], [app.regions.domestic.trips, app.regions.intl.trips]);
+
+  useEffect(() => {
+    if (!originalArrivalPending) return;
+    setTab("profile");
+    setDetail(null);
+    setOverlays([{ type: "recipientTransfers" }]);
+    onOriginalArrivalHandled();
+  }, [originalArrivalPending, onOriginalArrivalHandled]);
 
   const push = (o) => setOverlays((s) => [...s, o]);
   const popOverlay = () => setOverlays((s) => s.slice(0, -1));
@@ -70,6 +81,7 @@ export default function MobileShell({ app, settings, setSettings }) {
     openSettings: () => push({ type: "settings" }),
     openCouple: () => push({ type: "couple" }),
     openUpload: () => push({ type: "upload" }),
+    openOriginalStorage: () => push({ type: "originalStorage" }),
     openRecipientTransfers: () => push({ type: "recipientTransfers" }),
     close: () => setOverlays([]),
     toast: showToast,
@@ -104,7 +116,7 @@ export default function MobileShell({ app, settings, setSettings }) {
     );
   else if (tab === "inbox")
     root = <InboxScreen app={app} nav={nav} settings={settings} />;
-  else root = <ProfileScreen app={app} nav={nav} settings={settings} />;
+  else root = <ProfileScreen app={app} nav={nav} settings={settings} originalPushAvailable={originalPushAvailable} originalPushError={originalPushError} />;
 
   return (
     <div
@@ -174,6 +186,9 @@ export default function MobileShell({ app, settings, setSettings }) {
           )}
           {o.type === "upload" && (
             <UploadSheet app={app} nav={nav} settings={settings} />
+          )}
+          {o.type === "originalStorage" && (
+            <OriginalStorageScreen nav={nav} />
           )}
           {o.type === "recipientTransfers" && (
             <RecipientTransfersScreen nav={nav} owner={settings.myChar} />

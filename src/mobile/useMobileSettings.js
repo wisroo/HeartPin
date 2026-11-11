@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { ANNIVERSARY } from "../api.js";
 
 const KEY = "hp-mobile-settings";
-const DEFAULTS = { theme: "coral", tone: "다정", mapSkin: "cozy", showChars: true, nameBara: "바라", nameNyong: "뇽이", anniv: null, myChar: null, alerts: true };
+const DEFAULTS = { theme: "coral", tone: "다정", mapSkin: "cozy", showChars: true, nameBara: "바라", nameNyong: "뇽이", anniv: null, myChar: null, alerts: true, originalPush: false };
 
 function load() {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}") }; }

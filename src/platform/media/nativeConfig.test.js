@@ -7,14 +7,14 @@ const androidManifest = readSource("../../../android/app/src/main/AndroidManifes
 const mainActivity = readSource("../../../android/app/src/main/java/com/heartpin/app/MainActivity.java");
 
 describe("native media configuration", () => {
-  it("declares only the iOS photo-read and camera usage descriptions", () => {
+  it("declares iOS photo-read, photo-add, and camera usage descriptions", () => {
     expect(infoPlist).toMatch(
       /<key>NSPhotoLibraryUsageDescription<\/key>\s*<string>[^<]+<\/string>/,
     );
     expect(infoPlist).toMatch(
       /<key>NSCameraUsageDescription<\/key>\s*<string>[^<]+<\/string>/,
     );
-    expect(infoPlist).not.toContain("NSPhotoLibraryAddUsageDescription");
+    expect(infoPlist).toMatch(/<key>NSPhotoLibraryAddUsageDescription<\/key>\s*<string>[^<]+<\/string>/);
   });
 
   it("keeps Android original-photo permissions", () => {

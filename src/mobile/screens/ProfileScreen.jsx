@@ -2,7 +2,7 @@ import { Avatar, Ico } from "../ui/MobileAtoms.jsx";
 import { dday } from "../useMobileSettings.js";
 import { ordered } from "../../data.js";
 
-export default function ProfileScreen({ app, nav, settings }) {
+export default function ProfileScreen({ app, nav, settings, originalPushAvailable, originalPushError }) {
   const allTrips = app.regions.domestic.trips.concat(app.regions.intl.trips);
   let totSpots = 0, totPhotos = 0;
   allTrips.forEach(t => { const spots = ordered(t); totSpots += spots.length; spots.forEach(s => { totPhotos += (s.photos || []).length; }); });
@@ -29,12 +29,22 @@ export default function ProfileScreen({ app, nav, settings }) {
           </div>
           <div className="hpm-menu">
             <button className="hpm-menurow" onClick={nav.openRecipientTransfers}><span className="ic"><Ico.inbox /></span><span className="lb">받을 원본</span><span className="hpm-chip sm warm">확인하기</span><span className="ch">›</span></button>
+            <button className="hpm-menurow" onClick={nav.openOriginalStorage}><span className="ic"><Ico.image /></span><span className="lb">원본 보관 현황</span><span className="ch">›</span></button>
             <button className="hpm-menurow" onClick={nav.openCouple}><span className="ic"><Ico.heart width="18" height="18" /></span><span className="lb">캐릭터 · 커플 정보</span><span className="ch">›</span></button>
             <button className="hpm-menurow" onClick={nav.openSettings}><span className="ic"><Ico.skin /></span><span className="lb">지도 스킨</span><span className="hpm-chip sm cool">{({ cozy: "코지", sepia: "세피아", forest: "포레스트" })[settings.mapSkin]}</span></button>
             <div className="hpm-menurow"><span className="ic"><Ico.bell /></span><span className="lb">기록 알림</span>
               <button className={`hpm-toggle ${settings.alerts ? "on" : ""}`} onClick={() => nav.setSettings({ alerts: !settings.alerts })}><i /></button></div>
+            {originalPushAvailable && (
+              <div className="hpm-menurow">
+                <span className="ic"><Ico.bell /></span><span className="lb">원본 도착 알림</span>
+                <button type="button" role="switch" aria-label="원본 도착 알림" aria-checked={settings.originalPush}
+                  className={`hpm-toggle ${settings.originalPush ? "on" : ""}`}
+                  onClick={() => nav.setSettings({ originalPush: !settings.originalPush })}><i /></button>
+              </div>
+            )}
             <button className="hpm-menurow" onClick={nav.openSettings}><span className="ic"><Ico.gear width="16" height="16" /></span><span className="lb">계정 · 동기화 · 설정</span><span className="ch">›</span></button>
           </div>
+          {originalPushError && <p role="alert">{originalPushError}</p>}
           <div className="hpm-pcnudge"><Ico.pc width="17" height="17" /><span>코스 편집 · 대사 다듬기 · 일괄 정리는 <b>PC에서</b> 더 편해요</span></div>
         </div>
       </div>

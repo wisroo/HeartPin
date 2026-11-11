@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
@@ -30,6 +31,10 @@ import com.getcapacitor.annotation.PermissionCallback;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.IOException;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -38,7 +43,8 @@ import java.util.List;
     permissions = {
         @Permission(strings = { Manifest.permission.ACCESS_MEDIA_LOCATION }, alias = HeartPinMediaPlugin.MEDIA_LOCATION),
         @Permission(strings = { Manifest.permission.READ_MEDIA_IMAGES }, alias = HeartPinMediaPlugin.READ_MEDIA_IMAGES),
-        @Permission(strings = { Manifest.permission.READ_EXTERNAL_STORAGE }, alias = HeartPinMediaPlugin.READ_EXTERNAL)
+        @Permission(strings = { Manifest.permission.READ_EXTERNAL_STORAGE }, alias = HeartPinMediaPlugin.READ_EXTERNAL),
+        @Permission(strings = { Manifest.permission.WRITE_EXTERNAL_STORAGE }, alias = "writeLegacy")
     }
 )
 public class HeartPinMediaPlugin extends Plugin {
@@ -47,6 +53,80 @@ public class HeartPinMediaPlugin extends Plugin {
     static final String READ_MEDIA_IMAGES = "readMediaImages";
     static final String READ_EXTERNAL = "readExternal";
     private static final int MAX_ORIGINAL_BYTES = 25 * 1024 * 1024;
+
+    @PluginMethod
+    public void saveOriginal(PluginCall call) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q && getPermissionState("writeLegacy") != PermissionState.GRANTED) {
+            requestPermissionForAlias("writeLegacy", call, "savePermissionCallback");
+            return;
+        }
+        writeOriginal(call);
+    }
+
+    @PermissionCallback
+    private void savePermissionCallback(PluginCall call) {
+        if (getPermissionState("writeLegacy") != PermissionState.GRANTED) {
+            call.reject("사진함 저장 권한이 필요해요");
+            return;
+        }
+        writeOriginal(call);
+    }
+
+    private void writeOriginal(PluginCall call) {
+        getBridge().execute(() -> {
+            ContentResolver resolver = getContext().getContentResolver();
+            Uri photo = null;
+            HttpURLConnection connection = null;
+            try {
+                URL url = new URL(call.getString("url", ""));
+                String name = call.getString("filename", "");
+                String mimeType = call.getString("mimeType", "");
+                if (!"https".equals(url.getProtocol()) || name.isEmpty() || name.equals(".") || name.equals("..")
+                    || name.contains("/") || name.contains("\\") || !mimeType.startsWith("image/")) {
+                    throw new IOException();
+                }
+                connection = (HttpURLConnection) url.openConnection();
+                connection.setInstanceFollowRedirects(false);
+                connection.setConnectTimeout(15000);
+                connection.setReadTimeout(60000);
+                if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) throw new IOException();
+
+                boolean supportsPending = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q;
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Images.Media.DISPLAY_NAME, name);
+                values.put(MediaStore.Images.Media.MIME_TYPE, mimeType);
+                if (supportsPending) values.put(MediaStore.Images.Media.IS_PENDING, 1);
+                photo = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+                if (photo == null) throw new IOException();
+                long written = 0;
+                try (InputStream input = connection.getInputStream(); OutputStream output = resolver.openOutputStream(photo)) {
+                    if (output == null) throw new IOException();
+                    byte[] buffer = new byte[8192];
+                    int count;
+                    while ((count = input.read(buffer)) != -1) {
+                        output.write(buffer, 0, count);
+                        written += count;
+                    }
+                }
+                long expected = call.getData().optLong("size", 0);
+                if (written == 0 || (expected > 0 && written != expected)) throw new IOException();
+                if (supportsPending) {
+                    ContentValues publish = new ContentValues();
+                    publish.put(MediaStore.Images.Media.IS_PENDING, 0);
+                    if (resolver.update(photo, publish, null, null) != 1) throw new IOException();
+                }
+                call.resolve();
+            } catch (Exception error) {
+                if (photo != null) {
+                    try { resolver.delete(photo, null, null); }
+                    catch (Exception ignored) { /* Keep the original error visible to the caller. */ }
+                }
+                call.reject("원본을 사진함에 저장하지 못했어요");
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        });
+    }
 
     @PluginMethod
     public void pickImages(PluginCall call) {
