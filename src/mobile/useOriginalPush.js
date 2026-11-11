@@ -1,23 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { PushNotifications } from "@capacitor/push-notifications";
 import { getApiMode, setOriginalPushRegistration } from "../api.js";
-import { canUseOriginalPush, listenForOriginalArrival } from "../platform/notifications/originalArrival.js";
+import { canUseOriginalPush } from "../platform/notifications/originalArrival.js";
 
 const INSTALLATION_KEY = "hp-original-push-installation";
 
 export function useOriginalPush({ enabled, owner }) {
   const available = canUseOriginalPush() && getApiMode() === "supabase";
-  const [pending, setPending] = useState(false);
   const previous = useRef(Promise.resolve());
   const [error, setError] = useState(null);
-
-  useEffect(() => {
-    if (!available) return;
-    const listener = listenForOriginalArrival(() => setPending(true));
-    listener.catch(() => setError("알림을 열 수 없어요."));
-    return () => { listener.then((handle) => handle.remove()).catch(() => {}); };
-  }, [available]);
 
   useEffect(() => {
     if (!available || !owner) return;
@@ -69,6 +61,5 @@ export function useOriginalPush({ enabled, owner }) {
     };
   }, [available, enabled, owner]);
 
-  const handled = useCallback(() => setPending(false), []);
-  return { available, pending, error, handled };
+  return { available, error };
 }

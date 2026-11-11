@@ -633,7 +633,18 @@ export function createSupabaseAdapter({ client = createSupabaseClient(), prepare
           .maybeSingle(),
         "Supabase 원본 전송 삭제 기록 실패",
       );
-      if (!deleted) throw new Error("원본 전송 삭제 상태가 변경되지 않았어요");
+      if (!deleted) {
+        const completed = assertSupabaseOk(
+          await client.from("transfer_queue").select("id")
+            .eq("id", row.id)
+            .eq("dest_owner", owner)
+            .eq("status", "deleted")
+            .eq("landed_location", confirmedLocation)
+            .maybeSingle(),
+          "Supabase 원본 전송 삭제 상태 확인 실패",
+        );
+        if (!completed) throw new Error("원본 전송 삭제 상태가 변경되지 않았어요");
+      }
       return { transferId: row.id, status: "deleted", location: confirmedLocation };
     },
 

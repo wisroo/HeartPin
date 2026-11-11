@@ -896,6 +896,20 @@ describe("supabaseAdapter recipient save confirmation", () => {
     ]);
   });
 
+  it("accepts cleanup completed by another worker after the save claim", async () => {
+    const client = makeFetchClient({
+      rpcData: transferRow({ status: "landed", landed_location: "nyong_phone" }),
+      rows: { transfer_queue: [transferRow({
+        status: "deleted", landed_location: "nyong_phone", tmp_path: null,
+      })] },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(
+      adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
+    ).resolves.toEqual({ transferId: "tr_hash-123", status: "deleted", location: "nyong_phone" });
+  });
+
   it("supports bara's phone as an explicit recipient location", async () => {
     const client = makeFetchClient({
       rpcData: transferRow({

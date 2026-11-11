@@ -1,9 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App.jsx";
 import { useHeartPinState } from "./core/useHeartPinState.js";
 import { useResponsiveMode } from "./core/useResponsiveMode.js";
 import * as api from "./api.js";
+import { canUseOriginalPush, listenForOriginalArrival } from "./platform/notifications/originalArrival.js";
 
 vi.mock("./core/useHeartPinState.js", () => ({
   useHeartPinState: vi.fn(),
@@ -18,12 +19,22 @@ vi.mock("./api.js", () => ({
   signInToSupabase: vi.fn(),
 }));
 
+vi.mock("./platform/notifications/originalArrival.js", () => ({
+  canUseOriginalPush: vi.fn(() => false),
+  listenForOriginalArrival: vi.fn(),
+}));
+
 vi.mock("./web/WebApp.jsx", () => ({
   default: () => <div data-testid="web-app">web shell</div>,
 }));
 
 vi.mock("./mobile/MobileApp.jsx", () => ({
-  default: () => <div data-testid="mobile-app">mobile shell</div>,
+  default: ({ originalArrivalPending, onOriginalArrivalHandled }) => (
+    <div data-testid="mobile-app">
+      mobile shell
+      {originalArrivalPending && <button onClick={onOriginalArrivalHandled}>알림 이동 확인</button>}
+    </div>
+  ),
 }));
 
 vi.mock("./components/Journey.jsx", () => ({
@@ -56,6 +67,8 @@ const appState = {
 describe("App", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
+    canUseOriginalPush.mockReturnValue(false);
     useHeartPinState.mockReturnValue(appState);
     api.getApiMode.mockReturnValue("local");
     api.signInToSupabase.mockResolvedValue();
@@ -121,4 +134,26 @@ describe("App", () => {
       expect(api.signInToSupabase).toHaveBeenCalledWith("heartpin@example.com", "secret-password");
     });
   });
+});
+
+
+it("carries a notification tap across the login reload and consumes it once", async () => {
+  canUseOriginalPush.mockReturnValue(true);
+  api.getApiMode.mockReturnValue("supabase");
+  useResponsiveMode.mockReturnValue("mobile");
+  useHeartPinState.mockReturnValue({ ...appState, data: null, loadError: "Supabase 로그인이 필요해요" });
+  const remove = vi.fn();
+  listenForOriginalArrival.mockResolvedValue({ remove });
+  const login = render(<App />);
+  const [onArrival] = listenForOriginalArrival.mock.calls[0];
+  act(() => onArrival());
+  login.unmount();
+  await waitFor(() => expect(remove).toHaveBeenCalledOnce());
+
+  useHeartPinState.mockReturnValue(appState);
+  const loaded = render(<App />);
+  fireEvent.click(screen.getByRole("button", { name: "알림 이동 확인" }));
+  loaded.unmount();
+  render(<App />);
+  expect(screen.queryByRole("button", { name: "알림 이동 확인" })).not.toBeInTheDocument();
 });
