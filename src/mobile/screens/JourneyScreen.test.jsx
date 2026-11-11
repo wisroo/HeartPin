@@ -14,3 +14,11 @@ test("renders trip titles and totals; tapping opens trip", () => {
   fireEvent.click(screen.getByText("부산"));
   expect(nav.openTrip).toHaveBeenCalledWith(trip);
 });
+
+test("offers the first upload when there are no trips", () => {
+  const nav = { openUpload: vi.fn() };
+  render(<JourneyScreen app={{ regions: { domestic: { trips: [] }, intl: { trips: [] } } }} nav={nav} />);
+  expect(screen.queryByText(/오사카/)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "첫 여행 만들기" }));
+  expect(nav.openUpload).toHaveBeenCalledOnce();
+});

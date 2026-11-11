@@ -8,6 +8,7 @@ import Inbox from "./components/Inbox.jsx";
 import Upload from "./components/Upload.jsx";
 import TripPreview from "./components/TripPreview.jsx";
 import MobileApp from "./mobile/MobileApp.jsx";
+import { useOriginalArrival } from "./mobile/useOriginalArrival.js";
 import LoginScreen from "./mobile/onboarding/LoginScreen.jsx";
 import { useMobileSettings } from "./mobile/useMobileSettings.js";
 import WebApp from "./web/WebApp.jsx";
@@ -68,6 +69,7 @@ function MobileSupabaseLogin() {
 export default function App() {
   const mode = useResponsiveMode();
   const app = useHeartPinState();
+  const arrival = useOriginalArrival(mode === "mobile" && api.getApiMode() === "supabase");
 
   if (app.loadError) {
     if (api.getApiMode() === "supabase" && app.loadError.includes("Supabase 로그인이 필요")) {
@@ -83,7 +85,7 @@ export default function App() {
 
   return (
     <div className="hp-app">
-      {mode === "mobile" ? <MobileApp app={app} /> : <WebApp app={app} />}
+      {mode === "mobile" ? <MobileApp app={app} originalArrivalPending={arrival.pending} onOriginalArrivalHandled={arrival.handled} /> : <WebApp app={app} />}
 
       {app.journeyOpen && app.trip && <Journey trip={app.trip} onClose={app.closeJourney} />}
 

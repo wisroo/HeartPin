@@ -128,3 +128,13 @@ test("Profile opens recipient transfers for the active owner and returns", () =>
   fireEvent.click(screen.getByText("받을 원본 닫기"));
   expect(screen.getByText("우리")).toBeInTheDocument();
 });
+
+test("an original-arrival notification opens the recipient screen and back returns to profile", () => {
+  const onOriginalArrivalHandled = vi.fn();
+  render(<MobileShell app={emptyApp} settings={{ ...settings, myChar: "nyong" }} setSettings={vi.fn()}
+    originalArrivalPending onOriginalArrivalHandled={onOriginalArrivalHandled} />);
+  expect(screen.getByText("받을 원본 화면:nyong")).toBeVisible();
+  expect(onOriginalArrivalHandled).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByRole("button", { name: "받을 원본 닫기" }));
+  expect(screen.getByText("우리")).toBeVisible();
+});

@@ -259,3 +259,22 @@ it("removes the browser download anchor when click throws", () => {
   expect(() => startBrowserDownload(download, documentRef)).toThrow(error);
   expect(remove).toHaveBeenCalledOnce();
 });
+
+it("confirms native receipt only after Photos accepts the original and retries confirmation without another save", async () => {
+  const saveToLibrary = vi.fn().mockRejectedValueOnce(new Error("사진함 권한이 필요해요")).mockResolvedValueOnce(undefined);
+  api.listIncomingTransfers.mockResolvedValue([transfer]);
+  api.createIncomingTransferDownload.mockResolvedValue(download);
+  api.confirmIncomingTransferSaved.mockRejectedValueOnce(new Error("다시 시도")).mockResolvedValueOnce({});
+  render(<RecipientTransfersScreen nav={makeNav()} owner="nyong" saveToLibrary={saveToLibrary} />);
+  const save = await screen.findByRole("button", { name: "summer-river.jpg 사진함에 저장" });
+  fireEvent.click(save);
+  await screen.findByText("사진함 권한이 필요해요");
+  expect(api.confirmIncomingTransferSaved).not.toHaveBeenCalled();
+  fireEvent.click(save);
+  await screen.findByText("다시 시도");
+  fireEvent.click(screen.getByRole("button", { name: "저장 확인 다시 시도" }));
+  await screen.findByText("기다리는 원본이 없어요");
+  expect(saveToLibrary).toHaveBeenCalledTimes(2);
+  expect(api.confirmIncomingTransferSaved).toHaveBeenCalledTimes(2);
+  expect(api.confirmIncomingTransferSaved).toHaveBeenLastCalledWith(transfer.id, "nyong", "nyong_phone");
+});

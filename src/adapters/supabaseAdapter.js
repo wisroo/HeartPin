@@ -1,3 +1,4 @@
+import { ORIGINAL_LOCATION_LABELS, summarizeOriginalCopies } from "../core/originalLocations.js";
 import { createSupabaseClient } from "./supabaseClient.js";
 import { createBrowserUploadPreparer } from "./supabaseUploadPrep.js";
 
@@ -491,6 +492,53 @@ export function createSupabaseAdapter({ client = createSupabaseClient(), prepare
       return assembleState(client, rows);
     },
 
+    async setOriginalPushRegistration(installationId, registration) {
+      const session = assertSupabaseOk(await client.auth.getSession(), "Supabase 세션 확인 실패")?.session;
+      if (!session?.user) throw new Error("Supabase 로그인이 필요해요");
+      const devices = client.from("original_push_devices");
+      const result = registration
+        ? await devices.upsert({
+          user_id: session.user.id,
+          installation_id: installationId,
+          owner: registration.owner,
+          platform: registration.platform,
+          token: registration.token,
+        }, { onConflict: "user_id,installation_id" })
+        : await devices.delete().eq("user_id", session.user.id).eq("installation_id", installationId);
+      assertSupabaseOk(result, "원본 도착 알림 설정 저장 실패");
+    },
+
+    async getOriginalStorageSummary(owner) {
+      const copies = [];
+      const pageSize = 500;
+      for (let offset = 0; ; offset += pageSize) {
+        const page = assertSupabaseOk(
+          await client.from("photo_copies")
+            .select("content_hash,location,status,checked_at")
+            .eq("status", "present")
+            .in("location", Object.keys(ORIGINAL_LOCATION_LABELS))
+            .order("id")
+            .range(offset, offset + pageSize - 1),
+          "Supabase 원본 보관 현황 조회 실패",
+        ) || [];
+        copies.push(...page);
+        if (page.length < pageSize) break;
+      }
+      return summarizeOriginalCopies(copies, owner);
+    },
+
+    async listConfirmedOriginalLocations(contentHash) {
+      const rows = assertSupabaseOk(
+        await client.from("photo_copies")
+          .select("location")
+          .eq("content_hash", contentHash)
+          .eq("status", "present"),
+        "Supabase 원본 사본 위치 조회 실패",
+      ) || [];
+      const locations = new Set(rows.map(({ location }) => location));
+      return Object.keys(ORIGINAL_LOCATION_LABELS).filter((location) => locations.has(location));
+    },
+
     async listIncomingTransfers(owner) {
       relayDestinationFor(owner);
       const sessionResult = await client.auth.getSession();
@@ -585,7 +633,18 @@ export function createSupabaseAdapter({ client = createSupabaseClient(), prepare
           .maybeSingle(),
         "Supabase 원본 전송 삭제 기록 실패",
       );
-      if (!deleted) throw new Error("원본 전송 삭제 상태가 변경되지 않았어요");
+      if (!deleted) {
+        const completed = assertSupabaseOk(
+          await client.from("transfer_queue").select("id")
+            .eq("id", row.id)
+            .eq("dest_owner", owner)
+            .eq("status", "deleted")
+            .eq("landed_location", confirmedLocation)
+            .maybeSingle(),
+          "Supabase 원본 전송 삭제 상태 확인 실패",
+        );
+        if (!completed) throw new Error("원본 전송 삭제 상태가 변경되지 않았어요");
+      }
       return { transferId: row.id, status: "deleted", location: confirmedLocation };
     },
 
@@ -895,6 +954,9 @@ function getDefaultAdapter() {
 export const supabaseAdapter = {
   signIn: (...args) => getDefaultAdapter().signIn(...args),
   fetchState: (...args) => getDefaultAdapter().fetchState(...args),
+  setOriginalPushRegistration: (...args) => getDefaultAdapter().setOriginalPushRegistration(...args),
+  getOriginalStorageSummary: (...args) => getDefaultAdapter().getOriginalStorageSummary(...args),
+  listConfirmedOriginalLocations: (...args) => getDefaultAdapter().listConfirmedOriginalLocations(...args),
   listIncomingTransfers: (...args) => getDefaultAdapter().listIncomingTransfers(...args),
   createIncomingTransferDownload: (...args) => getDefaultAdapter().createIncomingTransferDownload(...args),
   confirmIncomingTransferSaved: (...args) => getDefaultAdapter().confirmIncomingTransferSaved(...args),

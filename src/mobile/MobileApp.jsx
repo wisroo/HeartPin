@@ -1,3 +1,4 @@
+import { useOriginalPush } from "./useOriginalPush.js";
 import { useState } from "react";
 import { useAuth } from "./useAuth.js";
 import { useMobileSettings } from "./useMobileSettings.js";
@@ -6,14 +7,26 @@ import LoginScreen from "./onboarding/LoginScreen.jsx";
 import PickSide from "./onboarding/PickSide.jsx";
 import MobileShell from "./MobileShell.jsx";
 
-export default function MobileApp({ app }) {
+export default function MobileApp({ app, originalArrivalPending, onOriginalArrivalHandled }) {
   const [splashDone, setSplashDone] = useState(false);
   const [settings, setSettings] = useMobileSettings();
   const auth = useAuth({ hasLoadedState: !!app.data });
+  const push = useOriginalPush({ enabled: settings.originalPush, owner: settings.myChar });
   let view;
-  if (!splashDone) view = <LaunchSplash settings={settings} onDone={() => setSplashDone(true)} />;
+  if (!splashDone && !originalArrivalPending) view = <LaunchSplash settings={settings} onDone={() => setSplashDone(true)} />;
   else if (auth.needsLogin) view = <LoginScreen onSignIn={auth.signIn} settings={settings} />;
   else if (!settings.myChar) view = <PickSide settings={settings} onPick={(who) => setSettings({ myChar: who })} />;
-  else view = <MobileShell app={app} settings={settings} setSettings={setSettings} />;
+  else view = <MobileShell
+    app={app}
+    settings={settings}
+    setSettings={setSettings}
+    originalArrivalPending={originalArrivalPending}
+    onOriginalArrivalHandled={() => {
+      setSplashDone(true);
+      onOriginalArrivalHandled();
+    }}
+    originalPushAvailable={push.available}
+    originalPushError={push.error}
+  />;
   return <div className="hpm" data-theme={settings.theme} style={{ height: "100dvh" }}>{view}</div>;
 }

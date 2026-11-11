@@ -990,3 +990,33 @@ h1,h2,h3{font-family:var(--fd);font-weight:400;letter-spacing:.01em;}
 /* entrance */
 .hpm-view>.hpm-pad{animation:hpm-slidein .3s ease;}
 @keyframes hpm-slidein{from{transform:translateY(8px);}to{transform:none;}}
+
+/* Desktop recipient transfers */
+.hp-home-top-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;}
+.hp-receive-dialog.hpm{position:fixed;margin:auto;width:min(560px,calc(100vw - 32px));max-height:85dvh;overflow:auto;padding:24px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:22px;}
+.hp-receive-dialog::backdrop{background:rgba(50,44,34,.55);}
+.hp-receive-dialog header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px;}
+.hp-receive-dialog h2{margin:0;}
+
+
+/* First journey and confirmed original copies */
+.hpm-first-trip{margin-top:9px;border-top:1.5px dashed var(--line2);padding-top:9px;}
+.hpm-first-trip p{margin:0 0 8px;color:var(--ink2);font-size:13px;}
+.hp-original-locations{display:grid;gap:6px;padding:9px 12px;border:1px solid var(--line);border-radius:13px;background:var(--card);color:var(--ink);font-size:13px;}
+.hp-original-locations ul{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none;}
+.hp-original-locations li{padding:3px 8px;border:1px solid var(--line);border-radius:999px;}
+.hpm-moment{overflow-y:auto;}
+.hpm-moment-stage{justify-content:center;}
+.hpm-moment-stage .hpm-photo{max-width:36dvh;}
+.hpm-moment .hp-original-locations{flex:none;margin:4px 18px 0;}
+.hpm-moment-strip{flex:none;}
+
+/* Mobile original storage summary */
+.hpm-storage{display:grid;gap:12px;padding-bottom:calc(env(safe-area-inset-bottom) + 24px);}
+.hpm-storage-panel{min-width:0;padding:14px;border:1px solid var(--line);border-radius:16px;background:var(--card);}
+.hpm-storage-panel h2{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px;margin:0;font-family:var(--fd);font-size:18px;font-weight:400;}
+.hpm-storage-panel p{margin:8px 0 0;color:var(--ink2);font-size:13px;line-height:1.5;}
+.hpm-storage-counts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0 0;}
+.hpm-storage-counts div{padding:10px;border-radius:10px;background:var(--card2);}
+.hpm-storage-counts dt{font-size:13px;color:var(--ink2);}
+.hpm-storage-counts dd{margin:4px 0 0;font-family:var(--fd);font-size:20px;}

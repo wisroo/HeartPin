@@ -3,7 +3,7 @@ import { CHAR } from "../chars.js";
 import { ordered } from "../data.js";
 import { Photo } from "./ui.jsx";
 
-export default function Home({ regions, region, trips, onRegion, onOpenTrip, onOpenMap, onNewTrip, onUpload, onInbox, inboxCount }) {
+export default function Home({ regions, region, trips, onRegion, onOpenTrip, onOpenMap, onNewTrip, onUpload, onInbox, inboxCount, onReceiveOriginals }) {
   return (
     <div className="hp-home">
       <div className="hp-home-inner">
@@ -16,7 +16,12 @@ export default function Home({ regions, region, trips, onRegion, onOpenTrip, onO
               <span className="hp-brand-sub">우리 둘만의 여정</span>
             </div>
           </div>
-          <button className="hp-home-inbox" type="button" onClick={onInbox}>정리함 <b>{inboxCount}</b></button>
+          <div className="hp-home-top-actions">
+            {onReceiveOriginals && (
+              <button className="hp-home-inbox" type="button" onClick={onReceiveOriginals}>받을 원본</button>
+            )}
+            <button className="hp-home-inbox" type="button" onClick={onInbox}>정리함 <b>{inboxCount}</b></button>
+          </div>
         </header>
 
         <section className="hp-hero">

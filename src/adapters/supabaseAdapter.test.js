@@ -896,6 +896,20 @@ describe("supabaseAdapter recipient save confirmation", () => {
     ]);
   });
 
+  it("accepts cleanup completed by another worker after the save claim", async () => {
+    const client = makeFetchClient({
+      rpcData: transferRow({ status: "landed", landed_location: "nyong_phone" }),
+      rows: { transfer_queue: [transferRow({
+        status: "deleted", landed_location: "nyong_phone", tmp_path: null,
+      })] },
+    });
+    const adapter = createSupabaseAdapter({ client });
+
+    await expect(
+      adapter.confirmIncomingTransferSaved("tr_hash-123", "nyong", "nyong_phone"),
+    ).resolves.toEqual({ transferId: "tr_hash-123", status: "deleted", location: "nyong_phone" });
+  });
+
   it("supports bara's phone as an explicit recipient location", async () => {
     const client = makeFetchClient({
       rpcData: transferRow({
@@ -1702,4 +1716,19 @@ describe("supabaseAdapter.uploadPhotos", () => {
       "relay-originals/user-123/tr_hash-123/gps.jpg",
     ]);
   });
+});
+
+it("reads confirmed copy locations for only the requested hash, without local paths", async () => {
+  const status = vi.fn().mockResolvedValue({ data: [
+    { location: "vault" }, { location: "personal_pc" }, { location: "vault" }, { location: "unknown" },
+  ], error: null });
+  const hash = vi.fn(() => ({ eq: status }));
+  const select = vi.fn(() => ({ eq: hash }));
+  const client = { from: vi.fn(() => ({ select })) };
+  const adapter = createSupabaseAdapter({ client, prepareUploadItem: null });
+  expect(await adapter.listConfirmedOriginalLocations("photo-hash")).toEqual(["personal_pc", "vault"]);
+  expect(client.from).toHaveBeenCalledWith("photo_copies");
+  expect(select).toHaveBeenCalledWith("location");
+  expect(hash).toHaveBeenCalledWith("content_hash", "photo-hash");
+  expect(status).toHaveBeenCalledWith("status", "present");
 });

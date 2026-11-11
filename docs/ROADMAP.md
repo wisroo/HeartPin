@@ -219,7 +219,7 @@ transfer_queue(id, user_id, content_hash, source_owner, dest_owner, tmp_path,
 | 작업 | 내용 | 공수 |
 |---|---|---|
 | 2-1. 적응형 모바일 셸 | **하단 탭바**(홈·지도·＋업로드·정리함) + Main을 **지도 풀스크린+바텀시트**로. 셸만 두 벌, 컴포넌트는 공유 | ~3일 |
-| 2-2. PWA화 | manifest·아이콘·서비스워커(앱 셸 캐시)·iOS 설치 안내 — iOS 7일 저장소 퇴거 회피. 업로드 신뢰성은 Capacitor 경로를 우선한다 | ~0.5–1일 |
+| 2-2. PWA화 | manifest·아이콘·iOS 설치 안내와 연결 끊김 안내 구현. 서비스워커는 정적 안내 화면을 캐시한다. 앱 셸 캐시와 설치 검증은 후속 | ~0.5–1일 |
 | 2-3. 모바일 업로드 다듬기 | Wi-Fi 옵션·진행률·위치 없음 처리. Android GPS 보존은 web input이 아니라 Capacitor native picker 기준으로 검증 | ~0.5일 |
 
 모바일 역할: 열람 + 업로드 + 기록 편집 (보관함 연결은 PC 전용 유지 — FS API 제약)
@@ -229,10 +229,10 @@ transfer_queue(id, user_id, content_hash, source_owner, dest_owner, tmp_path,
 | 작업 | 내용 | 공수 |
 |---|---|---|
 | 3-1. 자동 임시 원본 릴레이 | **구현됨(자동 검증 완료, 실환경 검증 대기)** — 기록 업로드에서 display/thumb과 함께 원본을 private `relay-originals`에 올리고, 반대 owner 대상 `transfer_queue`를 7일 만료로 생성 | ~1일 |
-| 3-2. 상대방 폰/PC 수령 | **부분 구현(Mobile/PWA 자동 검증 완료, Web·실환경 검증 대기)** — 활성 owner의 만료 전 대기 큐 조회, 다운로드 시작 시 5분 signed URL 생성, Profile → `받을 원본` 목록·오류·빈 상태·브라우저 다운로드 시작 UI 구현. Web UI와 Capacitor 카메라롤 저장은 후속 | ~0.5–1일 |
-| 3-3. 저장 확인·즉시 삭제 | **부분 구현(Mobile/PWA 자동 검증 완료, Web·실환경 검증 대기)** — Mobile/PWA에서 다운로드 시작 뒤 내 폰/개인 PC 저장을 명시적으로 확인. DB 트랜잭션으로 `photo_copies.present`와 transfer `landed`를 원자적으로 확정 → 검증된 임시 원본 삭제 → 조건부 `deleted` | ~0.5일 |
-| 3-4. 만료·실패 정리 | 7일 지난 미수령 원본과 실패한 삭제를 재처리. 기록·display/thumb는 보존하고 원본만 정리 | ~0.5일 |
-| 3-5. 보관 현황·안전 표시 | 위치별 사본 집계와 "폰에서 지워도 안전" 후보 표시. 웹은 표시까지만, 네이티브 삭제는 Phase 4 | ~1일 |
+| 3-2. 상대방 폰/PC 수령 | **Web/Mobile/PWA 구현, 실환경 검증 대기** — 활성 owner의 만료 전 대기 큐 조회, 다운로드 시작 시 5분 signed URL 생성, Profile → `받을 원본` 목록·오류·빈 상태·브라우저 다운로드 시작 UI 구현. Web 홈에서도 받는 사람을 선택하고 다운로드할 수 있다. Capacitor 사진함 저장은 후속 | ~0.5–1일 |
+| 3-3. 저장 확인·즉시 삭제 | **Web/Mobile/PWA 구현, 실환경 검증 대기** — 다운로드 시작 뒤 Mobile/PWA는 내 폰 또는 개인 PC, Web은 개인 PC 저장을 명시적으로 확인. DB 트랜잭션으로 `photo_copies.present`와 transfer `landed`를 원자적으로 확정 → 검증된 임시 원본 삭제 → 조건부 `deleted` | ~0.5일 |
+| 3-4. 만료·실패 정리 | **구현, 배포 대기** — 7일 지난 미수령 원본과 실패한 삭제를 예약 함수로 재처리. [배포 절차](./RELAY-CLEANUP.md) | ~0.5일 |
+| 3-5. 보관 현황·안전 표시 | **구현** — Web/Mobile 사진 상세에서 확인된 위치 표시. Mobile 프로필에서 위치별 고유 원본 수 표시 | ~1일 |
 | 3-6. 원본 찾기 / 하드 안착 | 해시·파일명 폴더 매칭, "원본: 바라 폰/뇽이 PC/하드" 뱃지, 빠진 원본을 하드로 모으는 큐 | ~1일 |
 
 상세 계약과 첫 구현 조각은 [Phase 3 자동 원본 릴레이 설계](./superpowers/specs/2026-07-17-automatic-original-relay-design.md)를 따른다.
@@ -242,7 +242,7 @@ transfer_queue(id, user_id, content_hash, source_owner, dest_owner, tmp_path,
 | 작업 | 내용 |
 |---|---|
 | 4-1. Capacitor 래핑 | 기존 웹 코드 ~90% 재사용, Xcode/Android Studio 빌드 환경 |
-| 4-2. 네이티브 기능 | **카메라롤 통합**(EXIF/GPS 확실 보존 — iOS 웹 변수 제거), **상대방 원본을 사진함에 저장**, **폰에서 흐릿 사진 삭제**(웹 불가 기능), **푸시 알림**("뇽이가 12장 올렸어요") |
+| 4-2. 네이티브 기능 | **카메라롤 통합**(EXIF/GPS 확실 보존 — iOS 웹 변수 제거), **상대방 원본을 사진함에 저장**, **폰에서 흐릿 사진 삭제**(웹 불가 기능), **원본 도착 푸시 알림**(구현, 배포 대기. [설정 절차](./ORIGINAL-ARRIVAL-PUSH.md)) |
 | 4-3. 스토어 출시 | 아이콘·스토어 자료·심사 대응. Apple $99/년 + Google $25. ⚠️ "웹뷰만 감싼 앱" 리젝 회피 위해 4-2 포함 상태로 심사 |
 
 전제: Phase 2의 모바일 UI가 그대로 앱 화면이 됨 — 화면 작업 추가분 사실상 0
@@ -279,9 +279,16 @@ Phase 5  개방·확장                  미착수/선택
 | Mobile 화면 | Phase 2의 핵심인 모바일 디자인 shell, 5-tab 앱, 주요 overlay가 실제 데이터에 연결됨 |
 | Capacitor 업로드 spike | Phase 1A 대부분 완료. Android original media picker에서 GPS 보존 확인. iOS dev install 검증은 남음 |
 | Supabase MVP 영속화 | Phase 1B 진행 중. PR #3로 fetchState 조립·레코드/정리함/배치/새 여행 영속화·클라이언트 업로드 준비(SHA-256·EXIF·display/thumb WebP→inbox_items) 구현. 실제 Supabase 환경·실기기 검증은 남음 |
-| 원본 전송/상대방 폰 저장 | Phase 3-1 자동 임시 릴레이, Phase 3-2 수신 목록·5분 download URL, Phase 3-3 명시적 위치 저장 확인·`photo_copies`·`landed`·임시 원본 삭제·`deleted` adapter 계약과 Mobile/PWA Profile → `받을 원본` UI 구현. Web UI와 실제 Supabase·브라우저·기기 검증은 대기 중 |
+| 원본 전송/상대방 폰 저장 | Phase 3-1 자동 임시 릴레이, Phase 3-2 수신 목록·5분 download URL, Phase 3-3 명시적 위치 저장 확인·`photo_copies`·`landed`·임시 원본 삭제·`deleted` adapter 계약과 Mobile/PWA Profile → `받을 원본` UI 구현. Web UI 구현. 실제 Supabase·브라우저·기기 검증은 대기 중 |
 
-따라서 현재 위치는 **Phase 1A 후반 + Phase 2 일부 선행 완료 + Phase 1B 영속화 슬라이스 병합 + Phase 3-1 자동 릴레이 생성 + Phase 3-2 수령 adapter + Phase 3-3 저장 확인 adapter + Mobile/PWA 수령 UI 구현**으로 본다. Web 다운로드·확인 UI와 Phase 3-4 cleanup은 후속이며, 실제 Supabase 환경·사진/브라우저/기기·iOS·외장하드 검증은 Local-only로 남긴다.
+따라서 현재 위치는 **Phase 1A 후반 + Phase 2 일부 선행 완료 + Phase 1B 영속화 슬라이스 병합 + Phase 3-1 자동 릴레이 생성 + Phase 3-2 수령 adapter + Phase 3-3 저장 확인 adapter + Mobile/PWA 수령 UI 구현**으로 본다. Phase 3-4 정리 함수와 네이티브 사진함 저장 경로도 구현됐으며, 실제 Supabase 환경·사진/브라우저/기기·iOS·외장하드 검증은 Local-only로 남긴다.
+
+#### 진행 로그 — 2026-11-11 · PWA 연결 안내와 Web 원본 수령
+
+- Phase 2-2: HTTPS 배포본의 iPhone 설치 절차와 앱 진입 시 연결 끊김 안내를 추가했다.
+- Phase 3-2/3-3: Supabase 모드의 Web 홈에서 `받을 원본`을 열어 다운로드를 시작하고 개인 PC 저장을 명시적으로 확인할 수 있다.
+- Phase 3-4: 만료·삭제 실패를 재처리하는 Supabase 예약 함수를 추가했다. 배포와 예약 등록은 남아 있다.
+- Phase 4-2: Capacitor iOS/Android에서 원본을 사진함에 추가하고 저장 성공 후 수령을 확정한다.
 
 #### 진행 로그 — 2026-08-06 · Phase 3 Mobile/PWA 상대방 원본 수령 UI
 

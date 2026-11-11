@@ -124,7 +124,7 @@ create table if not exists public.transfer_queue (
   original_size bigint,
   mime_type text,
   status text not null default 'uploaded'
-    constraint transfer_queue_status_check check (status in ('uploaded', 'landed', 'deleted', 'failed')),
+    constraint transfer_queue_status_check check (status in ('uploaded', 'landed', 'deleted', 'failed', 'expired')),
   expires_at timestamptz not null default (now() + interval '7 days'),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -311,7 +311,7 @@ alter table public.transfer_queue add constraint transfer_queue_distinct_owners
   check (source_owner <> dest_owner);
 alter table public.transfer_queue drop constraint if exists transfer_queue_status_check;
 alter table public.transfer_queue add constraint transfer_queue_status_check
-  check (status in ('uploaded', 'landed', 'deleted', 'failed'));
+  check (status in ('uploaded', 'landed', 'deleted', 'failed', 'expired'));
 alter table public.transfer_queue drop constraint if exists transfer_queue_uploaded_path_check;
 alter table public.transfer_queue add
   constraint transfer_queue_uploaded_path_check
@@ -658,3 +658,60 @@ create policy "authenticated delete photos" on storage.objects
       )
     )
   );
+
+-- Native original-arrival notification registrations and private delivery queue.
+create table if not exists public.original_push_devices (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  installation_id uuid not null,
+  owner text not null check (owner in ('bara', 'nyong')),
+  platform text not null check (platform in ('ios', 'android')),
+  token text not null check (length(token) between 1 and 4096),
+  unique (user_id, installation_id),
+  unique (platform, token)
+);
+
+alter table public.original_push_devices enable row level security;
+revoke all on public.original_push_devices from anon;
+grant select, insert, update, delete on public.original_push_devices to authenticated;
+grant select, delete on public.original_push_devices to service_role;
+drop policy if exists "own original push devices" on public.original_push_devices;
+create policy "own original push devices" on public.original_push_devices
+  for all to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
+
+create index if not exists original_push_devices_recipient
+  on public.original_push_devices (user_id, owner);
+
+create table if not exists public.original_push_outbox (
+  id bigint generated always as identity primary key,
+  transfer_id text not null references public.transfer_queue(id) on delete cascade,
+  device_id uuid not null references public.original_push_devices(id) on delete cascade,
+  retry_at timestamptz not null default now(),
+  unique (transfer_id, device_id)
+);
+
+alter table public.original_push_outbox enable row level security;
+revoke all on public.original_push_outbox from anon, authenticated;
+grant select, update, delete on public.original_push_outbox to service_role;
+create index if not exists original_push_outbox_due on public.original_push_outbox (retry_at, id);
+
+create or replace function public.enqueue_original_arrival_push()
+returns trigger language plpgsql security definer set search_path = ''
+as $$
+begin
+  if new.status = 'uploaded' then
+    insert into public.original_push_outbox (transfer_id, device_id)
+    select new.id, device.id
+    from public.original_push_devices as device
+    where device.user_id = new.user_id and device.owner = new.dest_owner
+    on conflict (transfer_id, device_id) do nothing;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.enqueue_original_arrival_push() from public, anon, authenticated;
+drop trigger if exists enqueue_original_arrival_push on public.transfer_queue;
+create trigger enqueue_original_arrival_push after insert on public.transfer_queue
+  for each row execute function public.enqueue_original_arrival_push();
